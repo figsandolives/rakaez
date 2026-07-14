@@ -1,0 +1,25 @@
+.success-heading > span {
+  background: #e8f7f0;
+  color: #16855b;
+}
+
+.verification-note {
+  margin: 0 0 18px;
+  padding: 16px 17px;
+  border: 1px solid #bfe2df;
+  border-radius: 12px;
+  background: #f0faf8;
+  color: #334155;
+}
+
+.verification-note b {
+  display: block;
+  margin-bottom: 6px;
+  color: #0f766e;
+}
+
+.verification-note p {
+  margin: 0;
+  line-height: 1.8;
+  font-size: 13px;
+}

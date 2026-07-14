@@ -1,6 +1,6 @@
 import { CONFIG } from "./config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-import { getAuth, browserLocalPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { getAuth, browserLocalPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { getDatabase, ref, get, set, push, onValue } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js";
 
@@ -9,7 +9,7 @@ const auth = getAuth(app);
 const db = getDatabase(app);
 const storage = getStorage(app);
 const $ = (selector) => document.querySelector(selector);
-const state = { user: null, demo: false, page: "employees", employees: [], entities: ["الإدارة العامة", "فرع العاصمة", "فرع الأحمدي"], search: "", pendingLogin: null };
+const state = { user: null, demo: false, page: "employees", employees: [], entities: ["الإدارة العامة", "فرع العاصمة", "فرع الأحمدي"], search: "", pendingLogin: null, pendingSignup: null, authMode: "login", registrationInProgress: false };
 
 const nav = [
   ["employees", "الموظفين", "♟"], ["general", "كتاب عام", "▤"], ["deduction", "كتاب خصم", "◫"],
@@ -35,7 +35,8 @@ async function initialize() {
   onAuthStateChanged(auth, user => {
     state.user = user;
     $("#loading").classList.add("hidden");
-    if (user || state.demo) openDashboard(); else openAuth();
+    if (state.registrationInProgress) return;
+    if (user || state.demo) openDashboard(); else openAuth(state.authMode);
   });
 }
 
@@ -45,6 +46,7 @@ function openAuth(mode="login") {
 }
 
 function renderAuth(mode="login") {
+  state.authMode = mode;
   const card = $("#auth-card");
   if (mode === "otp" && state.pendingLogin) {
     card.innerHTML = `<div class="auth-heading"><span>◈</span><h2>تحقق من واتساب</h2><p>أرسلنا رمزاً إلى الرقم المنتهي بـ ${state.pendingLogin.phone.slice(-4)}</p></div>
@@ -52,9 +54,18 @@ function renderAuth(mode="login") {
     $("#otp-form").onsubmit = verifyLoginOtp; $("#back-login").onclick = () => { state.pendingLogin = null; renderAuth("login"); };
     return;
   }
+  if (mode === "signup-otp" && state.pendingSignup) {
+    card.innerHTML = `<div class="auth-heading"><span>◈</span><h2>تحقق من رقم واتساب</h2><p>أرسلنا رمزاً إلى الرقم المنتهي بـ ${state.pendingSignup.phone.slice(-4)}</p></div>
+      <form id="signup-otp-form"><label>رمز التحقق<input id="signup-code" class="otp-input" inputmode="numeric" maxlength="6" placeholder="— — — — — —" autofocus required></label><p id="form-message" class="form-message">بعد التحقق سنرسل رابط تفعيل إلى بريدك الإلكتروني.</p><button class="primary wide">تحقق وأنشئ الحساب</button></form><button id="back-register" class="text-btn wide">العودة إلى بيانات الحساب</button>`;
+    $("#signup-otp-form").onsubmit = verifySignupOtp; $("#back-register").onclick = () => renderAuth("register"); return;
+  }
+  if (mode === "email-sent" && state.pendingSignup) {
+    card.innerHTML = `<div class="auth-heading success-heading"><span>✓</span><h2>تم إنشاء الحساب</h2><p>أرسلنا رابط تفعيل البريد إلى<br><b>${escapeHtml(state.pendingSignup.email)}</b></p></div><div class="verification-note"><b>الخطوة الأخيرة</b><p>افتح الرسالة واضغط رابط التفعيل، ثم ارجع وسجّل الدخول. تحقق أيضاً من مجلد الرسائل غير المرغوب فيها.</p></div><button id="go-login" class="primary wide">الانتقال إلى تسجيل الدخول</button>`;
+    $("#go-login").onclick = () => { state.pendingSignup = null; renderAuth("login"); }; return;
+  }
   if (mode === "register") {
     card.innerHTML = `<div class="auth-heading"><span>♙</span><h2>إنشاء حساب المنشأة</h2><p>تحقق مزدوج عبر البريد وواتساب</p></div>
-      <form id="register-form"><label>البريد الإلكتروني<input id="reg-email" type="email" required></label><label>رقم الهاتف الكويتي<div class="phone"><span>🇰🇼 +965</span><input id="reg-phone" inputmode="numeric" maxlength="8" required></div></label><label>كلمة المرور<input id="reg-password" type="password" minlength="6" required></label><button class="primary wide">إرسال رموز التحقق</button><p id="form-message" class="form-message">يتطلب إرسال البريد إضافة رابط خدمة البريد داخل config.js.</p></form><button id="back-login" class="text-btn wide">لدي حساب بالفعل</button>`;
+      <form id="register-form"><label>البريد الإلكتروني<input id="reg-email" type="email" autocomplete="email" required></label><label>رقم الهاتف الكويتي<div class="phone"><span>🇰🇼 +965</span><input id="reg-phone" inputmode="numeric" autocomplete="tel" maxlength="8" required></div></label><label>كلمة المرور<input id="reg-password" type="password" autocomplete="new-password" minlength="6" required></label><button class="primary wide">إرسال رمز واتساب</button><p id="form-message" class="form-message">سيصلك رمز على واتساب، وبعده رابط تفعيل على بريدك.</p></form><button id="back-login" class="text-btn wide">لدي حساب بالفعل</button>`;
     $("#register-form").onsubmit = requestSignup; $("#back-login").onclick = () => renderAuth("login"); return;
   }
   card.innerHTML = `<div class="auth-heading"><span>✓</span><h2>مرحباً بعودتك</h2><p>سجّل الدخول للمتابعة إلى لوحة الموارد البشرية</p></div>
@@ -77,6 +88,10 @@ async function beginLogin(event) {
     const check = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${CONFIG.firebase.apiKey}`, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({email,password,returnSecureToken:true}) });
     const identity = await check.json(); if (!check.ok) throw new Error("البريد أو رقم الهاتف أو كلمة المرور غير صحيحة");
     const profile = await fetch(`${CONFIG.firebase.databaseURL}/userProfiles/${identity.localId}.json?auth=${identity.idToken}`).then(r => r.json());
+    if (profile?.requiresEmailVerification) {
+      const lookup = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${CONFIG.firebase.apiKey}`, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({idToken:identity.idToken}) }).then(r => r.json());
+      if (!lookup.users?.[0]?.emailVerified) throw new Error("فعّل بريدك الإلكتروني من الرسالة التي أرسلناها، ثم حاول الدخول مرة أخرى");
+    }
     const phone = String(profile?.phone || digits(identifier).replace(/\D/g,"")); if (phone.length < 8) throw new Error("لا يوجد رقم واتساب مسجل لهذا الحساب");
     const request = await fetch(CONFIG.n8n.loginOtpUrl, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({phone,email,purpose:"hrms_login"}) });
     const data = await request.json(); if (!request.ok || data.ok === false) throw new Error(data.message || "تعذر إرسال رمز الدخول");
@@ -94,8 +109,44 @@ async function verifyLoginOtp(event) {
 }
 
 async function requestSignup(event) {
-  event.preventDefault();
-  if (!CONFIG.n8n.emailOtpUrl || !CONFIG.n8n.whatsappSignupOtpUrl) return showError("لم يتم إعداد بريد الإرسال وإنشاء الحساب بعد. تسجيل الدخول عبر واتساب جاهز.");
+  event.preventDefault(); const button = event.submitter; button.disabled = true; button.textContent = "جارٍ إرسال الرمز...";
+  try {
+    const email = $("#reg-email").value.trim().toLowerCase();
+    const phone = digits($("#reg-phone").value).replace(/\D/g, "");
+    const password = $("#reg-password").value;
+    if (!/^\d{8}$/.test(phone)) throw new Error("رقم الهاتف الكويتي يجب أن يتكون من 8 أرقام");
+    if (password.length < 6) throw new Error("كلمة المرور يجب ألا تقل عن 6 خانات");
+    const endpoint = CONFIG.n8n.whatsappSignupOtpUrl || CONFIG.n8n.loginOtpUrl;
+    const request = await fetch(endpoint, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({phone:`965${phone}`,email,purpose:"hrms_signup"}) });
+    const data = await request.json(); if (!request.ok || data.ok === false) throw new Error(data.message || "تعذر إرسال رمز واتساب");
+    state.pendingSignup = { email, phone:`965${phone}`, localPhone:phone, password }; renderAuth("signup-otp");
+  } catch (error) { showError(error.message || "تعذر بدء إنشاء الحساب"); button.disabled = false; button.textContent = "إرسال رمز واتساب"; }
+}
+
+async function verifySignupOtp(event) {
+  event.preventDefault(); const button = event.submitter; button.disabled = true; button.textContent = "جارٍ إنشاء الحساب...";
+  try {
+    const code = digits($("#signup-code").value).replace(/\D/g, "");
+    if (code.length !== 6) throw new Error("اكتب رمز التحقق المكوّن من 6 أرقام");
+    const endpoint = CONFIG.n8n.whatsappSignupVerifyUrl || CONFIG.n8n.verifyOtpUrl;
+    const verify = await fetch(endpoint, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({phone:state.pendingSignup.phone,code,purpose:"hrms_signup"}) });
+    const data = await verify.json(); if (!verify.ok || !data.ok) throw new Error(data.message || "رمز التحقق غير صحيح");
+    state.registrationInProgress = true;
+    const credential = await createUserWithEmailAndPassword(auth, state.pendingSignup.email, state.pendingSignup.password);
+    await Promise.all([
+      set(ref(db, `userProfiles/${credential.user.uid}`), { email:state.pendingSignup.email, phone:state.pendingSignup.phone, localPhone:state.pendingSignup.localPhone, requiresEmailVerification:true, createdAt:Date.now() }),
+      set(ref(db, `phoneDirectory/${state.pendingSignup.localPhone}`), { email:state.pendingSignup.email, uid:credential.user.uid })
+    ]);
+    await sendEmailVerification(credential.user);
+    state.authMode = "email-sent";
+    await signOut(auth);
+    state.registrationInProgress = false;
+    renderAuth("email-sent");
+  } catch (error) {
+    state.registrationInProgress = false;
+    const messages = { "auth/email-already-in-use":"هذا البريد مسجل مسبقاً", "auth/invalid-email":"البريد الإلكتروني غير صحيح", "auth/weak-password":"كلمة المرور ضعيفة" };
+    showError(messages[error.code] || error.message || "تعذر إنشاء الحساب"); button.disabled = false; button.textContent = "تحقق وأنشئ الحساب";
+  }
 }
 
 function openDashboard() {
