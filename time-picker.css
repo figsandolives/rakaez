@@ -1,8 +1,12 @@
-.custom-time-picker{height:48px;display:grid;grid-template-columns:74px 10px 74px minmax(105px,1fr);align-items:center;gap:5px;padding:4px;border:1px solid #dbe1e9;border-radius:11px;background:#fff;transition:.2s}
+.work-segment-modal{width:min(760px,calc(100vw - 40px))}
+.work-segment-modal .time-grid{grid-template-columns:minmax(0,1fr) 34px minmax(0,1fr)}
+.work-segment-modal .time-grid label{min-width:0}
+.custom-time-picker{width:100%;min-width:0;height:48px;display:grid;grid-template-columns:minmax(58px,74px) 8px minmax(58px,74px) minmax(96px,1fr);align-items:center;gap:5px;padding:4px;border:1px solid #dbe1e9;border-radius:11px;background:#fff;transition:.2s}
 .custom-time-picker:focus-within{border-color:#14a297;box-shadow:0 0 0 4px rgba(20,162,151,.1)}
 .custom-time-picker select{height:38px;padding:0 8px;border:0;border-radius:8px;background:#f5f8fa;box-shadow:none!important;text-align:center;direction:ltr;font-size:15px;font-weight:900;cursor:pointer}
 .custom-time-picker select:hover{background:#eaf5f4;color:#0f766e}
 .custom-time-picker b{color:#667085;text-align:center;font-size:17px}
 .custom-time-picker .period-select{direction:rtl;background:#e9f5f4;color:#0f766e;font-size:13px}
 .timeline-segment b{direction:rtl;font-size:12px;white-space:nowrap}
-@media(max-width:600px){.custom-time-picker{grid-template-columns:62px 8px 62px minmax(92px,1fr)}.custom-time-picker select{padding-inline:4px;font-size:13px}.custom-time-picker .period-select{font-size:12px}}
+@media(max-width:700px){.work-segment-modal{width:min(520px,calc(100vw - 28px))}.work-segment-modal .time-grid{grid-template-columns:1fr}.work-segment-modal .time-grid>span{display:none}.custom-time-picker{grid-template-columns:minmax(58px,74px) 8px minmax(58px,74px) minmax(96px,1fr)}}
+@media(max-width:400px){.custom-time-picker{grid-template-columns:55px 6px 55px minmax(86px,1fr)}.custom-time-picker select{padding-inline:3px;font-size:12px}.custom-time-picker .period-select{font-size:11px}}

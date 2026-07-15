@@ -1,0 +1,13 @@
+.primary-phone-block{max-width:720px}
+.editable-phone{grid-template-columns:minmax(150px,auto) 1fr;direction:ltr}
+.editable-phone .dial-select{width:auto;min-width:150px;padding:0 10px;border:0;border-left:1px solid var(--line);border-radius:0;background:#f4f8f8;box-shadow:none!important;color:#17364b;font-size:12px;font-weight:800;direction:rtl;cursor:pointer}
+.editable-phone .dial-select:hover,.editable-phone .dial-select:focus{background:#e7f5f3;color:var(--teal)}
+.editable-phone input{direction:ltr;text-align:left}
+.phone-group-head{display:flex;align-items:center;justify-content:space-between;margin:24px 0 12px;padding-top:21px;border-top:1px solid #edf0f3}
+.phone-group-head h4{margin:0;color:var(--navy)}
+.phone-group-head p{margin:4px 0 0;color:#98a2b3;font-size:11px}
+.alternate-phones{display:grid;gap:12px}
+.alternate-phone-row{display:grid;grid-template-columns:minmax(0,720px) 34px;gap:12px;align-items:end;padding:15px;border:1px solid #edf1f4;border-radius:13px;background:#f8fafb}
+.relative-row .editable-phone{margin-top:0}
+@media(max-width:700px){.primary-phone-block{max-width:none}.editable-phone{grid-template-columns:132px 1fr}.editable-phone .dial-select{min-width:132px;font-size:11px}.alternate-phone-row{grid-template-columns:1fr 34px}}
+@media(max-width:420px){.editable-phone{grid-template-columns:112px 1fr}.editable-phone .dial-select{min-width:112px;padding-inline:5px;font-size:10px}}
