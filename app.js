@@ -1,6 +1,6 @@
 import { CONFIG } from "./config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-import { getAuth, browserLocalPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { getAuth, browserLocalPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { getDatabase, ref, get, set, push, onValue } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js";
 
@@ -8,195 +8,131 @@ const app = initializeApp(CONFIG.firebase);
 const auth = getAuth(app);
 const db = getDatabase(app);
 const storage = getStorage(app);
-const $ = (selector) => document.querySelector(selector);
-const state = { user: null, demo: false, page: "employees", employees: [], entities: ["الإدارة العامة", "فرع العاصمة", "فرع الأحمدي"], search: "", pendingLogin: null, pendingSignup: null, authMode: "login", registrationInProgress: false };
+const $ = selector => document.querySelector(selector);
+const state = { user:null, demo:false, page:"employees", employees:[], entities:["الإدارة العامة","فرع العاصمة","فرع الأحمدي"], search:"", pendingLogin:null, bound:false, draftSegments:[] };
+
+const icons = {
+  employees:"<svg viewBox='0 0 24 24'><path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'/></svg>",
+  schedules:"<svg viewBox='0 0 24 24'><path d='M3 5h18v16H3zM16 3v4M8 3v4M3 10h18'/></svg>",
+  attendance:"<svg viewBox='0 0 24 24'><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></svg>",
+  decisions:"<svg viewBox='0 0 24 24'><path d='M6 3h12v18H6zM9 7h6M9 11h6M9 15h4'/></svg>",
+  deduction:"<svg viewBox='0 0 24 24'><path d='M4 4h16v16H4zM8 12h8'/></svg>",
+  warning:"<svg viewBox='0 0 24 24'><path d='M12 3 2 21h20L12 3zM12 9v5M12 18h.01'/></svg>",
+  notice:"<svg viewBox='0 0 24 24'><path d='M12 3v12M12 20h.01'/></svg>",
+  notifications:"<svg viewBox='0 0 24 24'><path d='M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4'/></svg>",
+  reminders:"<svg viewBox='0 0 24 24'><circle cx='12' cy='13' r='8'/><path d='M12 9v4l3 2M9 2h6'/></svg>",
+  entities:"<svg viewBox='0 0 24 24'><path d='M3 21h18M5 21V5h10v16M15 10h4v11M8 9h4M8 13h4M8 17h4'/></svg>",
+  settings:"<svg viewBox='0 0 24 24'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.07 14H3v-4h.09A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.63h.01A1.7 1.7 0 0 0 10 3.07V3h4v.09A1.7 1.7 0 0 0 15 4.64a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 9v.01A1.7 1.7 0 0 0 20.93 10H21v4h-.09A1.7 1.7 0 0 0 19.4 15z'/></svg>"
+};
 
 const nav = [
-  ["employees", "الموظفين", "♟"], ["general", "كتاب عام", "▤"], ["deduction", "كتاب خصم", "◫"],
-  ["warning", "كتاب تنبيه", "⚠"], ["notice", "كتاب لفت نظر", "!"], ["decisions", "قرارات وتعميمات إدارية", "▧"],
-  ["schedules", "جدول الدوامات", "▦"], ["attendance", "تقرير البصمة", "◎"], ["notifications", "إشعارات", "♢"],
-  ["reminders", "تذكيرات", "◷"], ["entities", "جهات العمل", "▥"], ["add", "إدراج موظف", "+"], ["settings", "إعدادات", "⚙"]
+  ["employees","الموظفين","employees"], ["schedules","جدول الدوامات","schedules"], ["attendance","تقرير البصمة","attendance"],
+  ["separator"], ["decisions","قرارات وتعميمات إدارية","decisions"], ["deduction","كتاب خصم","deduction"], ["warning","كتاب تنبيه","warning"], ["notice","كتاب لفت نظر","notice"],
+  ["separator"], ["notifications","إشعارات","notifications"], ["reminders","تذكيرات","reminders"],
+  ["separator"], ["entities","جهات العمل","entities"], ["settings","إعدادات","settings"]
+];
+
+const countries = [
+  ["الكويت","+965","🇰🇼"],["السعودية","+966","🇸🇦"],["البحرين","+973","🇧🇭"],["قطر","+974","🇶🇦"],["الإمارات العربية المتحدة","+971","🇦🇪"],["عُمان","+968","🇴🇲"],["العراق","+964","🇮🇶"],["الأردن","+962","🇯🇴"],["فلسطين","+970","🇵🇸"],["لبنان","+961","🇱🇧"],["سوريا","+963","🇸🇾"],["مصر","+20","🇪🇬"],["اليمن","+967","🇾🇪"],["السودان","+249","🇸🇩"],["ليبيا","+218","🇱🇾"],["تونس","+216","🇹🇳"],["الجزائر","+213","🇩🇿"],["المغرب","+212","🇲🇦"],["موريتانيا","+222","🇲🇷"],["الصومال","+252","🇸🇴"],["جيبوتي","+253","🇩🇯"],["جزر القمر","+269","🇰🇲"],
+  ["الهند","+91","🇮🇳"],["باكستان","+92","🇵🇰"],["بنغلاديش","+880","🇧🇩"],["سريلانكا","+94","🇱🇰"],["نيبال","+977","🇳🇵"],["الفلبين","+63","🇵🇭"],["إندونيسيا","+62","🇮🇩"],["ماليزيا","+60","🇲🇾"],["تركيا","+90","🇹🇷"],["إيران","+98","🇮🇷"],["أفغانستان","+93","🇦🇫"],["الصين","+86","🇨🇳"],["اليابان","+81","🇯🇵"],["كوريا الجنوبية","+82","🇰🇷"],["تايلاند","+66","🇹🇭"],["فيتنام","+84","🇻🇳"],["سنغافورة","+65","🇸🇬"],
+  ["الولايات المتحدة","+1","🇺🇸"],["كندا","+1","🇨🇦"],["المملكة المتحدة","+44","🇬🇧"],["فرنسا","+33","🇫🇷"],["ألمانيا","+49","🇩🇪"],["إيطاليا","+39","🇮🇹"],["إسبانيا","+34","🇪🇸"],["هولندا","+31","🇳🇱"],["بلجيكا","+32","🇧🇪"],["سويسرا","+41","🇨🇭"],["السويد","+46","🇸🇪"],["النرويج","+47","🇳🇴"],["الدنمارك","+45","🇩🇰"],["فنلندا","+358","🇫🇮"],["روسيا","+7","🇷🇺"],["أوكرانيا","+380","🇺🇦"],["اليونان","+30","🇬🇷"],["رومانيا","+40","🇷🇴"],["أستراليا","+61","🇦🇺"],["نيوزيلندا","+64","🇳🇿"],
+  ["إثيوبيا","+251","🇪🇹"],["إريتريا","+291","🇪🇷"],["كينيا","+254","🇰🇪"],["أوغندا","+256","🇺🇬"],["تنزانيا","+255","🇹🇿"],["نيجيريا","+234","🇳🇬"],["غانا","+233","🇬🇭"],["جنوب أفريقيا","+27","🇿🇦"],["البرازيل","+55","🇧🇷"],["الأرجنتين","+54","🇦🇷"],["المكسيك","+52","🇲🇽"]
 ];
 
 const samples = [
-  { id:"s1", fullName:"نورة خالد العتيبي", jobTitle:"رئيسة الموارد البشرية", workEntity:"الإدارة العامة", dailyHours:8, scheduleType:"fixed" },
-  { id:"s2", fullName:"أحمد يوسف الشمري", jobTitle:"أخصائي شؤون موظفين", workEntity:"فرع العاصمة", dailyHours:8, scheduleType:"variable" },
-  { id:"s3", fullName:"مريم عبدالعزيز القطان", jobTitle:"محاسبة رواتب", workEntity:"الإدارة العامة", dailyHours:7, scheduleType:"fixed" }
+  {id:"s1",fullName:"نورة خالد العتيبي",jobTitle:"رئيسة الموارد البشرية",workEntity:"الإدارة العامة",dailyHours:8,scheduleType:"fixed"},
+  {id:"s2",fullName:"أحمد يوسف الشمري",jobTitle:"أخصائي شؤون موظفين",workEntity:"فرع العاصمة",dailyHours:8,scheduleType:"variable"},
+  {id:"s3",fullName:"مريم عبدالعزيز القطان",jobTitle:"محاسبة رواتب",workEntity:"الإدارة العامة",dailyHours:7,scheduleType:"fixed"}
 ];
 
-const digits = (value="") => String(value).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[۰-۹]/g, d => "۰۱۲۳۴۵۶۷۸۹".indexOf(d));
-const initials = (name="") => name.split(" ").slice(0,2).map(x => x[0] || "").join("");
-const escapeHtml = (value="") => String(value).replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
-const showToast = (message) => { const el = $("#toast"); el.innerHTML = `<i>✓</i><div><b>تمت العملية بنجاح</b><p>${escapeHtml(message)}</p></div>`; el.classList.remove("hidden"); setTimeout(() => el.classList.add("hidden"), 3500); };
-const showError = (message) => { const el = $("#form-message"); if (el) { el.textContent = message; el.className = "form-message error"; } };
+const digits = (value="") => String(value).replace(/[٠-٩]/g,d=>"٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[۰-۹]/g,d=>"۰۱۲۳۴۵۶۷۸۹".indexOf(d));
+const onlyDigits = (value="") => digits(value).replace(/\D/g,"");
+const initials = (name="") => name.split(" ").slice(0,2).map(x=>x[0]||"").join("");
+const escapeHtml = (value="") => String(value).replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
+const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
+const countryByName = name => countries.find(x=>x[0]===name) || countries[0];
+const durationHours = (from,to) => { const [fh,fm]=from.split(":").map(Number), [th,tm]=to.split(":").map(Number); let minutes=(th*60+tm)-(fh*60+fm); if(minutes<=0) minutes+=1440; return minutes/60; };
+const formatHours = n => Number.isInteger(n)?String(n):String(Math.round(n*100)/100);
 
-async function initialize() {
-  await setPersistence(auth, browserLocalPersistence);
-  onAuthStateChanged(auth, user => {
-    state.user = user;
-    $("#loading").classList.add("hidden");
-    if (state.registrationInProgress) return;
-    if (user || state.demo) openDashboard(); else openAuth(state.authMode);
-  });
+function showToast(message){const el=$("#toast");el.innerHTML=`<i>✓</i><div><b>تمت العملية بنجاح</b><p>${escapeHtml(message)}</p></div>`;el.classList.remove("hidden");setTimeout(()=>el.classList.add("hidden"),4500);}
+function showError(message){const el=$("#form-message");if(el){el.textContent=message;el.className="form-message error";el.scrollIntoView({behavior:"smooth",block:"center"});}}
+function passwordField(id,placeholder=""){return `<div class="password-field"><input id="${id}" type="password" placeholder="${placeholder}" minlength="6" required><button type="button" class="password-toggle" aria-label="إظهار كلمة المرور" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div>`;}
+function bindPasswordToggles(){document.querySelectorAll(".password-toggle").forEach(button=>button.onclick=()=>{const input=button.previousElementSibling;const visible=input.type==="text";input.type=visible?"password":"text";button.classList.toggle("visible",!visible);button.setAttribute("aria-pressed",String(!visible));button.setAttribute("aria-label",visible?"إظهار كلمة المرور":"إخفاء كلمة المرور");});}
+
+async function initialize(){await setPersistence(auth,browserLocalPersistence);onAuthStateChanged(auth,user=>{state.user=user;$("#loading").classList.add("hidden");if(user||state.demo)openDashboard();else openAuth();});}
+function openAuth(mode="login"){$("#dashboard").classList.add("hidden");$("#auth-page").classList.remove("hidden");renderAuth(mode);}
+function renderAuth(mode="login"){
+  const card=$("#auth-card");
+  if(mode==="otp"&&state.pendingLogin){card.innerHTML=`<div class="auth-heading"><span>◈</span><h2>تحقق من واتساب</h2><p>أرسلنا رمزاً إلى الرقم المنتهي بـ ${state.pendingLogin.phone.slice(-4)}</p></div><form id="otp-form"><label>رمز الدخول<input id="login-code" class="otp-input" inputmode="numeric" maxlength="6" placeholder="— — — — — —" autofocus required></label><p id="form-message" class="form-message">صلاحية الرمز 5 دقائق.</p><button class="primary wide">تحقق وادخل للنظام</button></form><button id="back-login" class="text-btn wide">العودة إلى تسجيل الدخول</button>`;$("#otp-form").onsubmit=verifyLoginOtp;$("#back-login").onclick=()=>{state.pendingLogin=null;renderAuth("login");};return;}
+  if(mode==="register"){card.innerHTML=`<div class="auth-heading"><span>♙</span><h2>إنشاء حساب المنشأة</h2><p>تحقق مزدوج عبر البريد وواتساب</p></div><form id="register-form"><label>البريد الإلكتروني<input id="reg-email" type="email" required></label><label>رقم الهاتف الكويتي<div class="phone"><span>🇰🇼 +965</span><input id="reg-phone" inputmode="numeric" maxlength="8" required></div></label><label>كلمة المرور${passwordField("reg-password")}</label><button class="primary wide">إرسال رموز التحقق</button><p id="form-message" class="form-message">يتطلب إرسال البريد إضافة رابط خدمة البريد داخل config.js.</p></form><button id="back-login" class="text-btn wide">لدي حساب بالفعل</button>`;$("#register-form").onsubmit=requestSignup;$("#back-login").onclick=()=>renderAuth("login");bindPasswordToggles();bindEnglishNumbers(card);return;}
+  card.innerHTML=`<div class="auth-heading"><span>✓</span><h2>مرحباً بعودتك</h2><p>سجّل الدخول للمتابعة إلى لوحة الموارد البشرية</p></div><form id="login-form"><label>البريد الإلكتروني أو رقم الهاتف<input id="identifier" placeholder="name@company.com أو 5XXXXXXX" required></label><label>رمز المرور${passwordField("password","اكتب رمز المرور")}</label><p id="form-message" class="form-message hidden"></p><button class="primary wide">دخول آمن ←</button></form><div class="divider"><span>حساب جديد</span></div><button id="register-btn" class="secondary wide">＋ إنشاء حساب</button><button id="demo-btn" class="text-btn wide">معاينة النظام بدون تسجيل</button><small class="secure-note">🔒 جلسة دخول مشفّرة ومحفوظة على هذا الجهاز</small>`;
+  $("#login-form").onsubmit=beginLogin;$("#register-btn").onclick=()=>renderAuth("register");$("#demo-btn").onclick=()=>{state.demo=true;state.employees=[...samples];openDashboard();};bindPasswordToggles();
 }
 
-function openAuth(mode="login") {
-  $("#dashboard").classList.add("hidden"); $("#auth-page").classList.remove("hidden");
-  renderAuth(mode);
+async function resolveEmail(identifier){if(identifier.includes("@"))return identifier.trim();const phone=onlyDigits(identifier).slice(-8);const snap=await get(ref(db,`phoneDirectory/${phone}`));if(!snap.exists())throw new Error("لم يتم العثور على حساب بهذا الرقم");return snap.val().email;}
+async function beginLogin(event){event.preventDefault();const button=event.submitter;button.disabled=true;button.textContent="جارٍ التحقق...";try{const identifier=$("#identifier").value,password=$("#password").value,email=await resolveEmail(identifier);const check=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${CONFIG.firebase.apiKey}`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email,password,returnSecureToken:true})});const identity=await check.json();if(!check.ok)throw new Error("البريد أو رقم الهاتف أو كلمة المرور غير صحيحة");const profile=await fetch(`${CONFIG.firebase.databaseURL}/userProfiles/${identity.localId}.json?auth=${identity.idToken}`).then(r=>r.json());const phone=String(profile?.phone||onlyDigits(identifier));if(phone.length<8)throw new Error("لا يوجد رقم واتساب مسجل لهذا الحساب");const request=await fetch(CONFIG.n8n.loginOtpUrl,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone,email,purpose:"hrms_login"})});const data=await request.json();if(!request.ok||data.ok===false)throw new Error(data.message||"تعذر إرسال رمز الدخول");state.pendingLogin={email,password,phone};renderAuth("otp");}catch(error){showError(error.message||"تعذر تسجيل الدخول");button.disabled=false;button.textContent="دخول آمن ←";}}
+async function verifyLoginOtp(event){event.preventDefault();const code=onlyDigits($("#login-code").value),button=event.submitter;button.disabled=true;try{const verify=await fetch(CONFIG.n8n.verifyOtpUrl,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({phone:state.pendingLogin.phone,code,purpose:"hrms_login"})});const data=await verify.json();if(!verify.ok||!data.ok)throw new Error(data.message||"رمز الدخول غير صحيح");await signInWithEmailAndPassword(auth,state.pendingLogin.email,state.pendingLogin.password);state.pendingLogin=null;}catch(error){showError(error.message);button.disabled=false;}}
+async function requestSignup(event){event.preventDefault();if(!CONFIG.n8n.emailOtpUrl||!CONFIG.n8n.whatsappSignupOtpUrl)return showError("لم يتم إعداد بريد الإرسال وإنشاء الحساب بعد. تسجيل الدخول عبر واتساب جاهز.");}
+
+function openDashboard(){$("#auth-page").classList.add("hidden");$("#dashboard").classList.remove("hidden");const identity=state.user?.email||"وضع المعاينة";$("#user-email").textContent=identity;$("#user-avatar").textContent=identity[0]?.toUpperCase()||"م";$("#header-avatar").textContent=identity[0]?.toUpperCase()||"م";renderNav();bindData();renderPage();}
+function renderNav(){$("#side-nav").innerHTML=nav.map(item=>item[0]==="separator"?'<div class="nav-separator" aria-hidden="true"></div>':`<button data-page="${item[0]}" class="${state.page===item[0]?"active":""}"><i>${icons[item[2]]}</i><span>${item[1]}</span>${item[0]==="notifications"?"<em>3</em>":""}</button>`).join("");$("#side-nav").querySelectorAll("button").forEach(button=>button.onclick=()=>{state.page=button.dataset.page;renderNav();renderPage();});}
+function bindData(){if(state.demo||!state.user||state.bound)return;state.bound=true;onValue(ref(db,"organizations/default/employees"),snap=>{const value=snap.val()||{};state.employees=Object.entries(value).map(([id,v])=>({id,...v}));renderPage();});onValue(ref(db,"organizations/default/workEntities"),snap=>{if(snap.exists())state.entities=Object.values(snap.val());renderPage();});}
+function hero(title,subtitle,button=""){return `<section class="page-hero"><div><span class="eyebrow">قاعدة بيانات الموارد البشرية</span><h1>${title}</h1><p>${subtitle}</p></div>${button}</section>`;}
+function renderPage(){const item=nav.find(x=>x[0]===state.page);const label=item?.[1]||(state.page==="add"?"إدراج موظف":"الموظفين");$("#page-title").textContent=label;if(state.page==="employees")renderEmployees();else if(state.page==="add")renderEmployeeForm();else if(state.page==="entities")renderEntities();else if(state.page==="schedules")renderSchedules();else renderGeneric(label);window.scrollTo({top:0,behavior:"smooth"});}
+
+function renderEmployees(){const list=state.employees.filter(e=>[e.fullName,e.jobTitle,e.workEntity].some(v=>String(v||"").includes(state.search)));$("#page-content").innerHTML=`${hero("الموظفون","نظرة موحّدة على فريقك وبياناتهم ونظام دوامهم.",'<button id="add-employee" class="primary">＋ إدراج موظف</button>')}<div class="toolbar"><label class="search-box">⌕<input id="employee-search" placeholder="ابحث بالاسم أو المسمى أو جهة العمل" value="${escapeHtml(state.search)}"></label><div class="chips"><button class="active">الكل <span>${state.employees.length}</span></button><button>دوام ثابت</button><button>حسب الجدول</button></div></div><div class="employees-grid">${list.length?list.map(employeeCard).join(""):'<div class="empty"><b>لا توجد نتائج</b><p>أضف أول موظف أو غيّر عبارة البحث.</p></div>'}</div>`;$("#add-employee").onclick=()=>{state.page="add";state.draftSegments=[];renderNav();renderPage();};$("#employee-search").oninput=e=>{state.search=e.target.value;renderEmployees();};}
+function employeeCard(e){return `<article class="employee-card"><div class="card-cover"><span class="status ${e.scheduleType||"fixed"}"></span><div class="avatar">${e.photoUrl?`<img src="${escapeHtml(e.photoUrl)}" alt="">`:initials(e.fullName)}</div><button class="bell" aria-label="إشعارات الموظف">${icons.notifications}<span><b>آخر الإشعارات</b><small>طلب تعديل بصمة</small><small>إجازة بانتظار الاعتماد</small></span></button></div><div class="employee-info"><h3>${escapeHtml(e.fullName)}</h3><p>${escapeHtml(e.jobTitle||"")}</p><div class="entity">▥ ${escapeHtml(e.workEntity||"")}</div><footer><span>◷ ${e.dailyHours||0} ساعات</span><em class="${e.scheduleType||"fixed"}">${e.scheduleType==="variable"?"حسب الجدول":"دوام ثابت"}</em></footer></div></article>`;}
+
+function renderEmployeeForm(){
+  state.draftSegments=[];
+  const countryOptions=countries.map(c=>`<option value="${c[0]}">${c[2]} ${c[0]} (${c[1]})</option>`).join("");
+  $("#page-content").innerHTML=`<div class="form-page-heading"><button id="back-employees" class="back-btn">→</button><div><span>الموظفون / إدراج موظف</span><h1>إدراج موظف جديد</h1><p>أدخل بيانات الموظف وحدد نظام وساعات عمله.</p></div></div><form id="employee-form" class="employee-form" novalidate>
+  <section><div class="section-head"><span>01</span><div><h3>البيانات الأساسية</h3><p>الهوية الوظيفية والرسمية للموظف</p></div></div><label class="photo-upload"><input id="photo" type="file" accept="image/png,image/jpeg,image/webp"><span class="photo-preview">＋</span><b>إدراج صورة عرض</b><small>PNG أو JPG أو WEBP</small></label><div class="form-grid"><label>الاسم الكامل *<input name="fullName" autocomplete="name" required></label><label>الرقم المدني *<input name="civilId" class="english-number" inputmode="numeric" maxlength="12" required></label><label>الجنسية *<div class="search-select"><input id="nationality" name="nationality" list="countries-list" value="الكويت" autocomplete="off" placeholder="ابحث بالعربي عن الدولة" required><span>⌄</span><datalist id="countries-list">${countries.map(c=>`<option value="${c[0]}">${c[2]} ${c[1]}</option>`).join("")}</datalist></div><small class="field-hint">اكتب اسم الدولة بالعربي للبحث</small></label><label>المسمى الوظيفي *<input name="jobTitle" required></label><label class="wide-field">جهة العمل *<select name="workEntity" required><option value="">اختر جهة العمل</option>${state.entities.map(e=>`<option>${escapeHtml(e)}</option>`).join("")}</select><small class="field-hint">القائمة مرتبطة بصفحة جهات العمل</small></label></div></section>
+  <section><div class="section-head"><span>02</span><div><h3>معلومات التواصل الشخصية</h3><p>أرقام الموظف والأشخاص الأقرب إليه</p></div></div><div class="form-grid"><label>رقم الهاتف الكويتي *<div class="phone"><span>🇰🇼 +965</span><input name="kuwaitPhone" class="english-number" inputmode="numeric" maxlength="8" placeholder="XXXXXXXX" required></div><small class="field-hint">8 أرقام إنجليزية فقط</small></label><label>رقم هاتف الموظف الخاص<div class="phone personal-phone"><span id="personal-prefix">🇰🇼 +965</span><input name="personalPhone" class="english-number" inputmode="numeric" placeholder="رقم الهاتف"></div><small class="field-hint">فتح الخط يتغير حسب الجنسية</small></label></div><div class="relatives-head"><div><h4>أرقام هواتف أقرب الأشخاص</h4><p>أضف شخصًا واحدًا أو أكثر للتواصل عند الحاجة</p></div><button type="button" id="add-relative" class="circle-add" aria-label="إضافة قريب">＋</button></div><div id="relatives-list" class="relatives-list"></div></section>
+  <section><div class="section-head"><span>03</span><div><h3>ساعات العمل وتوزيع المهام</h3><p>حدد إجمالي الساعات واختر طريقة توزيعها</p></div></div><div class="hours-row"><label>عدد ساعات العمل للموظف *<div class="hours-input"><input id="daily-hours" name="dailyHours" class="english-number" inputmode="decimal" value="8" required><span>ساعة / يوم</span></div></label><fieldset class="schedule-choice"><legend>توزيع ساعات العمل *</legend><label><input type="radio" name="scheduleType" value="fixed" checked><span><i>✓</i><b>ساعات عمل ثابتة</b><small>وزّع الساعات على فترات ومهام واضحة</small></span></label><label><input type="radio" name="scheduleType" value="variable"><span><i>▦</i><b>ساعات عمل متغيرة حسب الجدول</b><small>سيظهر الموظف في صفحة جدول الدوامات</small></span></label></fieldset></div><div id="fixed-schedule" class="fixed-schedule"><div class="distribution-title"><div><h4>توزيع ساعات العمل</h4><p>أضف فترة وحدد مهامها حتى تكتمل ساعات اليوم</p></div><strong id="distribution-count">0 من 8 ساعات</strong></div><div class="timeline-row"><button type="button" id="add-segment" class="timeline-add" aria-label="إضافة فترة">＋</button><div id="work-timeline" class="work-timeline"></div></div><p id="timeline-help" class="timeline-help">اضغط علامة + لإضافة أول فترة عمل</p></div></section>
+  <p id="form-message" class="form-message hidden"></p><div class="form-actions"><button type="button" id="cancel-employee" class="secondary">إلغاء</button><button class="primary submit">＋ إضافة الموظف</button></div></form>`;
+  bindEmployeeForm();
 }
 
-function renderAuth(mode="login") {
-  state.authMode = mode;
-  const card = $("#auth-card");
-  if (mode === "otp" && state.pendingLogin) {
-    card.innerHTML = `<div class="auth-heading"><span>◈</span><h2>تحقق من واتساب</h2><p>أرسلنا رمزاً إلى الرقم المنتهي بـ ${state.pendingLogin.phone.slice(-4)}</p></div>
-      <form id="otp-form"><label>رمز الدخول<input id="login-code" class="otp-input" inputmode="numeric" maxlength="6" placeholder="— — — — — —" autofocus required></label><p id="form-message" class="form-message">صلاحية الرمز 5 دقائق.</p><button class="primary wide">تحقق وادخل للنظام</button></form><button id="back-login" class="text-btn wide">العودة إلى تسجيل الدخول</button>`;
-    $("#otp-form").onsubmit = verifyLoginOtp; $("#back-login").onclick = () => { state.pendingLogin = null; renderAuth("login"); };
-    return;
-  }
-  if (mode === "signup-otp" && state.pendingSignup) {
-    card.innerHTML = `<div class="auth-heading"><span>◈</span><h2>تحقق من رقم واتساب</h2><p>أرسلنا رمزاً إلى الرقم المنتهي بـ ${state.pendingSignup.phone.slice(-4)}</p></div>
-      <form id="signup-otp-form"><label>رمز التحقق<input id="signup-code" class="otp-input" inputmode="numeric" maxlength="6" placeholder="— — — — — —" autofocus required></label><p id="form-message" class="form-message">بعد التحقق سنرسل رابط تفعيل إلى بريدك الإلكتروني.</p><button class="primary wide">تحقق وأنشئ الحساب</button></form><button id="back-register" class="text-btn wide">العودة إلى بيانات الحساب</button>`;
-    $("#signup-otp-form").onsubmit = verifySignupOtp; $("#back-register").onclick = () => renderAuth("register"); return;
-  }
-  if (mode === "email-sent" && state.pendingSignup) {
-    card.innerHTML = `<div class="auth-heading success-heading"><span>✓</span><h2>تم إنشاء الحساب</h2><p>أرسلنا رابط تفعيل البريد إلى<br><b>${escapeHtml(state.pendingSignup.email)}</b></p></div><div class="verification-note"><b>الخطوة الأخيرة</b><p>افتح الرسالة واضغط رابط التفعيل، ثم ارجع وسجّل الدخول. تحقق أيضاً من مجلد الرسائل غير المرغوب فيها.</p></div><button id="go-login" class="primary wide">الانتقال إلى تسجيل الدخول</button>`;
-    $("#go-login").onclick = () => { state.pendingSignup = null; renderAuth("login"); }; return;
-  }
-  if (mode === "register") {
-    card.innerHTML = `<div class="auth-heading"><span>♙</span><h2>إنشاء حساب المنشأة</h2><p>تحقق مزدوج عبر البريد وواتساب</p></div>
-      <form id="register-form"><label>البريد الإلكتروني<input id="reg-email" type="email" autocomplete="email" required></label><label>رقم الهاتف الكويتي<div class="phone"><span>🇰🇼 +965</span><input id="reg-phone" inputmode="numeric" autocomplete="tel" maxlength="8" required></div></label><label>كلمة المرور<input id="reg-password" type="password" autocomplete="new-password" minlength="6" required></label><button class="primary wide">إرسال رمز واتساب</button><p id="form-message" class="form-message">سيصلك رمز على واتساب، وبعده رابط تفعيل على بريدك.</p></form><button id="back-login" class="text-btn wide">لدي حساب بالفعل</button>`;
-    $("#register-form").onsubmit = requestSignup; $("#back-login").onclick = () => renderAuth("login"); return;
-  }
-  card.innerHTML = `<div class="auth-heading"><span>✓</span><h2>مرحباً بعودتك</h2><p>سجّل الدخول للمتابعة إلى لوحة الموارد البشرية</p></div>
-    <form id="login-form"><label>البريد الإلكتروني أو رقم الهاتف<input id="identifier" placeholder="name@company.com أو 5XXXXXXX" required></label><label>رمز المرور<input id="password" type="password" placeholder="اكتب رمز المرور" autofocus required></label><p id="form-message" class="form-message hidden"></p><button class="primary wide">دخول آمن ←</button></form><div class="divider"><span>حساب جديد</span></div><button id="register-btn" class="secondary wide">＋ إنشاء حساب</button><button id="demo-btn" class="text-btn wide">معاينة النظام بدون تسجيل</button><small class="secure-note">🔒 جلسة دخول مشفّرة ومحفوظة على هذا الجهاز</small>`;
-  $("#login-form").onsubmit = beginLogin; $("#register-btn").onclick = () => renderAuth("register"); $("#demo-btn").onclick = () => { state.demo = true; state.employees = samples; openDashboard(); };
+function bindEnglishNumbers(root=document){root.querySelectorAll(".english-number").forEach(input=>input.addEventListener("input",()=>{const allowDecimal=input.id==="daily-hours";let value=digits(input.value).replace(allowDecimal?/[^0-9.]/g:/\D/g,"");if(allowDecimal){const parts=value.split(".");value=parts.shift()+(parts.length?"."+parts.join(""):"");}input.value=value;}));}
+function addRelativeRow(){const list=$("#relatives-list"),index=list.children.length;const row=document.createElement("div");row.className="relative-row";row.innerHTML=`<label>الرقم ${index+1}<div class="phone relative-phone"><span>+965</span><input class="english-number" name="relativePhone" inputmode="numeric" placeholder="رقم الهاتف"></div></label><label>نوع القرابة<input name="relation" placeholder="مثال: الأب، الزوجة، الأخ"></label>${index?'<button type="button" class="remove-relative" aria-label="حذف الرقم">×</button>':'<span></span>'}`;list.appendChild(row);row.querySelector(".remove-relative")?.addEventListener("click",()=>{row.remove();renumberRelatives();});bindEnglishNumbers(row);}
+function renumberRelatives(){document.querySelectorAll(".relative-row").forEach((row,i)=>row.querySelector("label").childNodes[0].textContent=`الرقم ${i+1}`);}
+function bindEmployeeForm(){
+  $("#back-employees").onclick=$("#cancel-employee").onclick=()=>{state.page="employees";renderNav();renderPage();};
+  $("#photo").onchange=e=>{const file=e.target.files[0];if(!file)return;const preview=$(".photo-preview");preview.innerHTML=`<img src="${URL.createObjectURL(file)}" alt="معاينة الصورة">`;preview.parentElement.classList.add("has-photo");};
+  $("#nationality").oninput=e=>{const country=countryByName(e.target.value);$("#personal-prefix").textContent=`${country[2]} ${country[1]}`;};
+  $("#add-relative").onclick=addRelativeRow;addRelativeRow();bindEnglishNumbers($("#employee-form"));
+  document.querySelectorAll('input[name="scheduleType"]').forEach(input=>input.onchange=()=>{$("#fixed-schedule").classList.toggle("hidden",input.value==="variable"&&input.checked);});
+  $("#daily-hours").oninput=()=>{const input=$("#daily-hours");input.value=digits(input.value).replace(/[^0-9.]/g,"");const total=Number(input.value)||0;const used=state.draftSegments.reduce((sum,s)=>sum+s.hours,0);if(used>total)state.draftSegments=[];renderTimeline();};
+  $("#add-segment").onclick=()=>openSegmentModal();$("#employee-form").onsubmit=saveEmployee;renderTimeline();
 }
 
-async function resolveEmail(identifier) {
-  if (identifier.includes("@")) return identifier.trim();
-  const phone = digits(identifier).replace(/\D/g, "").slice(-8);
-  const snap = await get(ref(db, `phoneDirectory/${phone}`));
-  if (!snap.exists()) throw new Error("لم يتم العثور على حساب بهذا الرقم");
-  return snap.val().email;
+function renderTimeline(){const total=Number($("#daily-hours")?.value)||0,used=state.draftSegments.reduce((sum,s)=>sum+s.hours,0),remaining=Math.max(0,total-used),timeline=$("#work-timeline");if(!timeline)return;const colors=["#0f766e","#2563a8","#c58a2c","#7b5cab","#be5b70","#2f8f63"];timeline.innerHTML=state.draftSegments.map((s,i)=>`<button type="button" class="timeline-segment" data-index="${i}" style="flex:${s.hours};background:${colors[i%colors.length]}" title="تعديل الفترة"><b>${s.from} — ${s.to}</b><span>${s.tasks.map(escapeHtml).join(" <i>＋</i> ")}</span><em>${formatHours(s.hours)} س</em></button>`).join("")+(remaining?`<div class="timeline-remaining" style="flex:${remaining}"><b>${formatHours(remaining)} ساعات متبقية</b><span>لم يتم توزيعها بعد</span></div>`:"");if(!total)timeline.innerHTML='<div class="timeline-remaining" style="flex:1"><b>أدخل عدد ساعات العمل</b></div>';$("#distribution-count").textContent=`${formatHours(used)} من ${formatHours(total)} ساعات`;$("#timeline-help").textContent=remaining?`متبقي ${formatHours(remaining)} ساعات لإكمال التوزيع`:"اكتمل توزيع جميع ساعات العمل ✓";$("#timeline-help").classList.toggle("complete",Boolean(total&&!remaining));$("#add-segment").disabled=!total||remaining<=0;timeline.querySelectorAll(".timeline-segment").forEach(button=>button.onclick=()=>openSegmentModal(Number(button.dataset.index)));}
+function openSegmentModal(editIndex=null){const editing=editIndex!==null,segment=editing?state.draftSegments[editIndex]:{from:"08:00",to:"14:00",tasks:[""]};$("#modal-root").innerHTML=`<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="segment-title"><header><div><span>توزيع ساعات العمل</span><h3 id="segment-title">${editing?"تعديل فترة العمل":"إضافة فترة عمل جديدة"}</h3></div><button type="button" class="modal-close" aria-label="إغلاق">×</button></header><form id="segment-form"><div class="time-grid"><label>من الساعة<input id="segment-from" type="time" value="${segment.from}" required></label><span>←</span><label>إلى الساعة<input id="segment-to" type="time" value="${segment.to}" required></label></div><div class="modal-duration">مدة الفترة: <b id="segment-duration">${formatHours(durationHours(segment.from,segment.to))} ساعات</b></div><div class="tasks-head"><label>مهام العمل</label><button type="button" id="add-task" class="mini-add">＋ مهمة إضافية</button></div><div id="tasks-list">${segment.tasks.map((task,i)=>taskInput(task,i)).join("")}</div><p id="segment-error" class="form-message error hidden"></p><footer>${editing?'<button type="button" id="delete-segment" class="danger-btn">حذف الفترة</button>':'<span></span>'}<div><button type="button" class="secondary modal-cancel">إلغاء</button><button class="primary">${editing?"حفظ التعديلات":"إضافة إلى توزيع المهام"}</button></div></footer></form></section></div>`;
+  const close=()=>{$("#modal-root").innerHTML="";};$(".modal-close").onclick=$(".modal-cancel").onclick=close;$(".modal-backdrop").onclick=e=>{if(e.target.classList.contains("modal-backdrop"))close();};$("#add-task").onclick=()=>{$("#tasks-list").insertAdjacentHTML("beforeend",taskInput("",$("#tasks-list").children.length));bindTaskRemovers();};bindTaskRemovers();const updateDuration=()=>{$("#segment-duration").textContent=`${formatHours(durationHours($("#segment-from").value,$("#segment-to").value))} ساعات`;};$("#segment-from").oninput=$("#segment-to").oninput=updateDuration;
+  if(editing)$("#delete-segment").onclick=()=>{state.draftSegments.splice(editIndex,1);close();renderTimeline();};
+  $("#segment-form").onsubmit=e=>{e.preventDefault();const from=$("#segment-from").value,to=$("#segment-to").value,hours=durationHours(from,to),tasks=[...document.querySelectorAll('.task-input input')].map(x=>x.value.trim()).filter(Boolean),total=Number($("#daily-hours").value),otherUsed=state.draftSegments.reduce((sum,s,i)=>sum+(i===editIndex?0:s.hours),0);if(!tasks.length)return segmentError("أضف مهمة عمل واحدة على الأقل.");if(otherUsed+hours>total+0.001)return segmentError(`مدة الفترة أكبر من الساعات المتبقية (${formatHours(total-otherUsed)} ساعات).`);const record={from,to,hours,tasks};if(editing)state.draftSegments[editIndex]=record;else state.draftSegments.push(record);close();renderTimeline();};
+}
+function taskInput(value,index){return `<div class="task-input"><span>${index+1}</span><input value="${escapeHtml(value)}" placeholder="اكتب مهمة العمل" required>${index?'<button type="button" aria-label="حذف المهمة">×</button>':'<i></i>'}</div>`;}
+function bindTaskRemovers(){document.querySelectorAll(".task-input button").forEach(button=>button.onclick=()=>{button.parentElement.remove();document.querySelectorAll(".task-input").forEach((row,i)=>row.querySelector("span").textContent=i+1);});}
+function segmentError(message){const el=$("#segment-error");el.textContent=message;el.classList.remove("hidden");}
+
+async function saveEmployee(event){
+  event.preventDefault();const form=event.target,button=event.submitter,data=Object.fromEntries(new FormData(form)),kuwaitPhone=onlyDigits(data.kuwaitPhone),dailyHours=Number(data.dailyHours),country=countryByName(data.nationality);
+  if(!form.checkValidity()){form.reportValidity();return showError("يرجى إكمال جميع الحقول المطلوبة.");}
+  if(!countries.some(c=>c[0]===data.nationality))return showError("اختر جنسية صحيحة من قائمة الدول.");
+  if(kuwaitPhone.length!==8)return showError("رقم الهاتف الكويتي يجب أن يتكون من 8 أرقام إنجليزية فقط.");
+  if(!dailyHours||dailyHours>24)return showError("أدخل عدد ساعات عمل صحيحًا من 1 إلى 24.");
+  if(data.scheduleType==="fixed"){const used=state.draftSegments.reduce((sum,s)=>sum+s.hours,0);if(Math.abs(used-dailyHours)>.001)return showError(`أكمل توزيع ساعات العمل. المتبقي ${formatHours(dailyHours-used)} ساعات.`);}
+  button.disabled=true;const id=crypto.randomUUID();let photoUrl="";$("#action-loading").classList.remove("hidden");
+  try{const file=$("#photo").files[0];if(file&&state.user){const target=storageRef(storage,`employee-photos/${state.user.uid}/${id}-${file.name}`);await uploadBytes(target,file);photoUrl=await getDownloadURL(target);}const relativePhones=[...form.querySelectorAll('[name="relativePhone"]')].map((input,i)=>({phone:onlyDigits(input.value),relation:form.querySelectorAll('[name="relation"]')[i]?.value.trim()||""})).filter(x=>x.phone);const record={id,fullName:data.fullName.trim(),civilId:onlyDigits(data.civilId),nationality:data.nationality,jobTitle:data.jobTitle.trim(),workEntity:data.workEntity,kuwaitPhone,personalPhone:onlyDigits(data.personalPhone),personalDialCode:country[1],relatives:relativePhones,dailyHours,scheduleType:data.scheduleType,segments:data.scheduleType==="fixed"?[...state.draftSegments]:[],photoUrl,createdAt:Date.now()};if(state.demo||!state.user)state.employees.unshift(record);else await set(ref(db,`organizations/default/employees/${id}`),record);await sleep(1500);$("#action-loading").classList.add("hidden");showToast(`تم إدراج الموظف ${record.fullName} بنجاح`);state.page="employees";state.draftSegments=[];renderNav();renderPage();}catch(error){$("#action-loading").classList.add("hidden");showError(error.message||"تعذر إدراج الموظف");button.disabled=false;}
 }
 
-async function beginLogin(event) {
-  event.preventDefault(); const button = event.submitter; button.disabled = true; button.textContent = "جارٍ التحقق...";
-  try {
-    const identifier = $("#identifier").value; const password = $("#password").value; const email = await resolveEmail(identifier);
-    const check = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${CONFIG.firebase.apiKey}`, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({email,password,returnSecureToken:true}) });
-    const identity = await check.json(); if (!check.ok) throw new Error("البريد أو رقم الهاتف أو كلمة المرور غير صحيحة");
-    const profile = await fetch(`${CONFIG.firebase.databaseURL}/userProfiles/${identity.localId}.json?auth=${identity.idToken}`).then(r => r.json());
-    if (profile?.requiresEmailVerification) {
-      const lookup = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${CONFIG.firebase.apiKey}`, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({idToken:identity.idToken}) }).then(r => r.json());
-      if (!lookup.users?.[0]?.emailVerified) throw new Error("فعّل بريدك الإلكتروني من الرسالة التي أرسلناها، ثم حاول الدخول مرة أخرى");
-    }
-    const phone = String(profile?.phone || digits(identifier).replace(/\D/g,"")); if (phone.length < 8) throw new Error("لا يوجد رقم واتساب مسجل لهذا الحساب");
-    const request = await fetch(CONFIG.n8n.loginOtpUrl, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({phone,email,purpose:"hrms_login"}) });
-    const data = await request.json(); if (!request.ok || data.ok === false) throw new Error(data.message || "تعذر إرسال رمز الدخول");
-    state.pendingLogin = { email, password, phone }; renderAuth("otp");
-  } catch (error) { showError(error.message || "تعذر تسجيل الدخول"); button.disabled = false; button.textContent = "دخول آمن ←"; }
-}
-
-async function verifyLoginOtp(event) {
-  event.preventDefault(); const code = digits($("#login-code").value).replace(/\D/g,""); const button = event.submitter; button.disabled = true;
-  try {
-    const verify = await fetch(CONFIG.n8n.verifyOtpUrl, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({phone:state.pendingLogin.phone,code,purpose:"hrms_login"}) });
-    const data = await verify.json(); if (!verify.ok || !data.ok) throw new Error(data.message || "رمز الدخول غير صحيح");
-    await signInWithEmailAndPassword(auth, state.pendingLogin.email, state.pendingLogin.password); state.pendingLogin = null;
-  } catch (error) { showError(error.message); button.disabled = false; }
-}
-
-async function requestSignup(event) {
-  event.preventDefault(); const button = event.submitter; button.disabled = true; button.textContent = "جارٍ إرسال الرمز...";
-  try {
-    const email = $("#reg-email").value.trim().toLowerCase();
-    const phone = digits($("#reg-phone").value).replace(/\D/g, "");
-    const password = $("#reg-password").value;
-    if (!/^\d{8}$/.test(phone)) throw new Error("رقم الهاتف الكويتي يجب أن يتكون من 8 أرقام");
-    if (password.length < 6) throw new Error("كلمة المرور يجب ألا تقل عن 6 خانات");
-    const endpoint = CONFIG.n8n.whatsappSignupOtpUrl || CONFIG.n8n.loginOtpUrl;
-    const request = await fetch(endpoint, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({phone:`965${phone}`,email,purpose:"hrms_signup"}) });
-    const data = await request.json(); if (!request.ok || data.ok === false) throw new Error(data.message || "تعذر إرسال رمز واتساب");
-    state.pendingSignup = { email, phone:`965${phone}`, localPhone:phone, password }; renderAuth("signup-otp");
-  } catch (error) { showError(error.message || "تعذر بدء إنشاء الحساب"); button.disabled = false; button.textContent = "إرسال رمز واتساب"; }
-}
-
-async function verifySignupOtp(event) {
-  event.preventDefault(); const button = event.submitter; button.disabled = true; button.textContent = "جارٍ إنشاء الحساب...";
-  try {
-    const code = digits($("#signup-code").value).replace(/\D/g, "");
-    if (code.length !== 6) throw new Error("اكتب رمز التحقق المكوّن من 6 أرقام");
-    const endpoint = CONFIG.n8n.whatsappSignupVerifyUrl || CONFIG.n8n.verifyOtpUrl;
-    const verify = await fetch(endpoint, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({phone:state.pendingSignup.phone,code,purpose:"hrms_signup"}) });
-    const data = await verify.json(); if (!verify.ok || !data.ok) throw new Error(data.message || "رمز التحقق غير صحيح");
-    state.registrationInProgress = true;
-    const credential = await createUserWithEmailAndPassword(auth, state.pendingSignup.email, state.pendingSignup.password);
-    await Promise.all([
-      set(ref(db, `userProfiles/${credential.user.uid}`), { email:state.pendingSignup.email, phone:state.pendingSignup.phone, localPhone:state.pendingSignup.localPhone, requiresEmailVerification:true, createdAt:Date.now() }),
-      set(ref(db, `phoneDirectory/${state.pendingSignup.localPhone}`), { email:state.pendingSignup.email, uid:credential.user.uid })
-    ]);
-    await sendEmailVerification(credential.user);
-    state.authMode = "email-sent";
-    await signOut(auth);
-    state.registrationInProgress = false;
-    renderAuth("email-sent");
-  } catch (error) {
-    state.registrationInProgress = false;
-    const messages = { "auth/email-already-in-use":"هذا البريد مسجل مسبقاً", "auth/invalid-email":"البريد الإلكتروني غير صحيح", "auth/weak-password":"كلمة المرور ضعيفة" };
-    showError(messages[error.code] || error.message || "تعذر إنشاء الحساب"); button.disabled = false; button.textContent = "تحقق وأنشئ الحساب";
-  }
-}
-
-function openDashboard() {
-  $("#auth-page").classList.add("hidden"); $("#dashboard").classList.remove("hidden");
-  const identity = state.user?.email || "وضع المعاينة"; $("#user-email").textContent = identity; $("#user-avatar").textContent = identity[0]?.toUpperCase() || "م"; $("#header-avatar").textContent = identity[0]?.toUpperCase() || "م";
-  renderNav(); bindData(); renderPage();
-}
-
-function renderNav() {
-  $("#side-nav").innerHTML = nav.map(([key,label,icon]) => `<button data-page="${key}" class="${state.page===key?"active":""}"><i>${icon}</i><span>${label}</span>${key==="notifications"?"<em>3</em>":""}</button>`).join("");
-  $("#side-nav").querySelectorAll("button").forEach(button => button.onclick = () => { state.page = button.dataset.page; renderNav(); renderPage(); });
-}
-
-function bindData() {
-  if (state.demo || !state.user || state.bound) return; state.bound = true;
-  onValue(ref(db,"organizations/default/employees"), snap => { const value=snap.val()||{}; state.employees=Object.entries(value).map(([id,v])=>({id,...v})); renderPage(); });
-  onValue(ref(db,"organizations/default/workEntities"), snap => { if(snap.exists()) state.entities=Object.values(snap.val()); renderPage(); });
-}
-
-function hero(title, subtitle, button="") { return `<section class="page-hero"><div><span class="eyebrow">قاعدة بيانات الموارد البشرية</span><h1>${title}</h1><p>${subtitle}</p></div>${button}</section>`; }
-
-function renderPage() {
-  const label = nav.find(x=>x[0]===state.page)?.[1] || "الموظفون"; $("#page-title").textContent=label;
-  if(state.page==="employees") renderEmployees(); else if(state.page==="add") renderEmployeeForm(); else if(state.page==="entities") renderEntities(); else if(state.page==="schedules") renderSchedules(); else renderGeneric(label);
-}
-
-function renderEmployees() {
-  const list=state.employees.filter(e=>[e.fullName,e.jobTitle,e.workEntity].some(v=>String(v||"").includes(state.search)));
-  $("#page-content").innerHTML = `${hero("الموظفون","نظرة موحّدة على فريقك وبياناتهم ونظام دوامهم.",'<button id="add-employee" class="primary">＋ إدراج موظف</button>')}<div class="toolbar"><label class="search-box">⌕<input id="employee-search" placeholder="ابحث بالاسم أو المسمى أو جهة العمل"></label><div class="chips"><button class="active">الكل <span>${state.employees.length}</span></button><button>دوام ثابت</button><button>حسب الجدول</button></div></div><div class="employees-grid">${list.length?list.map(employeeCard).join(""):'<div class="empty"><b>لا توجد نتائج</b><p>أضف أول موظف أو غيّر عبارة البحث.</p></div>'}</div>`;
-  $("#add-employee").onclick=()=>{state.page="add";renderNav();renderPage();}; $("#employee-search").oninput=e=>{state.search=e.target.value;renderEmployees();};
-}
-
-function employeeCard(e) { return `<article class="employee-card"><div class="card-cover"><span class="status ${e.scheduleType||"fixed"}"></span><div class="avatar">${e.photoUrl?`<img src="${escapeHtml(e.photoUrl)}" alt="">`:initials(e.fullName)}</div><button class="bell">♢<span><b>آخر الإشعارات</b><small>طلب تعديل بصمة</small><small>إجازة بانتظار الاعتماد</small></span></button></div><div class="employee-info"><h3>${escapeHtml(e.fullName)}</h3><p>${escapeHtml(e.jobTitle||"")}</p><div class="entity">▥ ${escapeHtml(e.workEntity||"")}</div><footer><span>◷ ${e.dailyHours||0} ساعات</span><em class="${e.scheduleType||"fixed"}">${e.scheduleType==="variable"?"حسب الجدول":"دوام ثابت"}</em></footer></div></article>`; }
-
-function renderEmployeeForm() {
-  $("#page-content").innerHTML=`${hero("إدراج موظف","أدخل البيانات الأساسية والتواصل ونظام الدوام.")}<form id="employee-form" class="employee-form"><section><div class="section-head"><span>01</span><div><h3>البيانات الأساسية</h3><p>الهوية الوظيفية والرسمية للموظف</p></div></div><label class="photo-upload"><input id="photo" type="file" accept="image/*"><span>▣</span><b>إدراج صورة عرض</b><small>PNG أو JPG</small></label><div class="form-grid"><label>الاسم الكامل *<input name="fullName" required></label><label>الرقم المدني *<input name="civilId" inputmode="numeric" required></label><label>الجنسية *<input name="nationality" value="الكويت" required></label><label>المسمى الوظيفي *<input name="jobTitle" required></label><label class="wide-field">جهة العمل *<select name="workEntity">${state.entities.map(e=>`<option>${escapeHtml(e)}</option>`).join("")}</select></label></div></section><section><div class="section-head"><span>02</span><div><h3>معلومات التواصل</h3><p>أرقام الموظف والأشخاص الأقرب إليه</p></div></div><div class="form-grid"><label>الهاتف الكويتي *<div class="phone"><span>🇰🇼 +965</span><input name="kuwaitPhone" maxlength="8" required></div></label><label>رقم الموظف الخاص<input name="personalPhone"></label><label>رقم قريب<input name="relativePhone"></label><label>نوع القرابة<input name="relation"></label></div></section><section><div class="section-head"><span>03</span><div><h3>ساعات العمل</h3><p>نظام الدوام وتوزيع المهام اليومية</p></div></div><div class="form-grid"><label>عدد الساعات<input name="dailyHours" type="number" min="1" max="24" value="8"></label><label>نظام الدوام<select name="scheduleType"><option value="fixed">ساعات عمل ثابتة</option><option value="variable">متغيرة حسب الجدول</option></select></label><label>من الساعة<input name="from" type="time" value="08:00"></label><label>إلى الساعة<input name="to" type="time" value="16:00"></label><label class="wide-field">مهام العمل<textarea name="tasks" rows="3" placeholder="افصل المهام بعلامة +"></textarea></label></div></section><button class="primary submit">＋ إضافة الموظف</button></form>`;
-  $("#employee-form").onsubmit=saveEmployee;
-}
-
-async function saveEmployee(event) {
-  event.preventDefault(); const button=event.submitter; button.disabled=true; button.textContent="جارٍ إدراج الموظف..."; const data=Object.fromEntries(new FormData(event.target)); const id=crypto.randomUUID(); let photoUrl="";
-  try { const file=$("#photo").files[0]; if(file&&state.user){const target=storageRef(storage,`employee-photos/${state.user.uid}/${id}-${file.name}`);await uploadBytes(target,file);photoUrl=await getDownloadURL(target);} const record={...data,id,dailyHours:Number(data.dailyHours),photoUrl,segments:data.scheduleType==="fixed"?[{from:data.from,to:data.to,tasks:String(data.tasks||"").split("+").map(x=>x.trim()).filter(Boolean)}]:[],createdAt:Date.now()}; if(state.demo||!state.user)state.employees.unshift(record);else await set(ref(db,`organizations/default/employees/${id}`),record); showToast(`تم إدراج الموظف ${data.fullName}`);state.page="employees";renderNav();renderPage(); } catch(error){alert(error.message);} finally{button.disabled=false;}
-}
-
-function renderEntities() { $("#page-content").innerHTML=`${hero("جهات العمل","أنشئ الفروع والإدارات التي يُسند إليها الموظفون.",'<form id="entity-form" class="entity-form"><input id="entity-name" placeholder="اسم الإدارة أو الفرع"><button class="primary">＋ إضافة جهة</button></form>')}<div class="entities">${state.entities.map((e,i)=>`<article><i style="background:${["#0f766e","#c6923f","#2563eb"][i%3]}">▥</i><div><h3>${escapeHtml(e)}</h3><p>${4+i*3} موظفين</p></div></article>`).join("")}</div>`; $("#entity-form").onsubmit=async e=>{e.preventDefault();const name=$("#entity-name").value.trim();if(!name)return;state.entities.push(name);if(state.user&&!state.demo)await set(push(ref(db,"organizations/default/workEntities")),name);showToast(`تمت إضافة ${name}`);renderEntities();}; }
-
-function renderSchedules(){const list=state.employees.filter(e=>e.scheduleType==="variable");$("#page-content").innerHTML=`${hero("جدول الدوامات","يظهر هنا الموظفون ذوو ساعات العمل المتغيرة فقط.")}<div class="schedule-list">${list.length?list.map(e=>`<article><span>${initials(e.fullName)}</span><div><b>${escapeHtml(e.fullName)}</b><small>${escapeHtml(e.workEntity||"")}</small></div><em>الأحد — الخميس</em><strong>08:00 — 16:00</strong></article>`).join(""):'<div class="empty"><b>لا يوجد موظفون بدوام متغير</b><p>اختر «متغيرة حسب الجدول» عند إدراج موظف.</p></div>'}</div>`;}
-
+function renderEntities(){$("#page-content").innerHTML=`${hero("جهات العمل","أنشئ الفروع والإدارات التي يُسند إليها الموظفون.",'<form id="entity-form" class="entity-form"><input id="entity-name" placeholder="اسم الإدارة أو الفرع"><button class="primary">＋ إضافة جهة</button></form>')}<div class="entities">${state.entities.map((e,i)=>`<article><i style="background:${["#0f766e","#c6923f","#2563eb"][i%3]}">▥</i><div><h3>${escapeHtml(e)}</h3><p>${state.employees.filter(x=>x.workEntity===e).length} موظفين</p></div></article>`).join("")}</div>`;$("#entity-form").onsubmit=async e=>{e.preventDefault();const name=$("#entity-name").value.trim();if(!name)return;state.entities.push(name);if(state.user&&!state.demo)await set(push(ref(db,"organizations/default/workEntities")),name);showToast(`تمت إضافة ${name}`);renderEntities();};}
+function renderSchedules(){const list=state.employees.filter(e=>e.scheduleType==="variable");$("#page-content").innerHTML=`${hero("جدول الدوامات","الموظفون ذوو ساعات العمل المتغيرة حسب الجدول فقط.")}<div class="schedule-note">ℹ الموظفون أصحاب الساعات الثابتة لا يظهرون في هذه الصفحة.</div><div class="schedule-list">${list.length?list.map(e=>`<article><span>${initials(e.fullName)}</span><div><b>${escapeHtml(e.fullName)}</b><small>${escapeHtml(e.workEntity||"")}</small></div><em>بانتظار توزيع الجدول</em><strong>${e.dailyHours} ساعات / يوم</strong></article>`).join(""):'<div class="empty"><b>لا يوجد موظفون بدوام متغير</b><p>اختر «ساعات عمل متغيرة حسب الجدول» عند إدراج موظف.</p></div>'}</div>`;}
 function renderGeneric(label){$("#page-content").innerHTML=`${hero(label,`مساحة منظمة لإنشاء ومراجعة واعتماد ${label}.`,'<button class="primary">＋ إنشاء جديد</button>')}<div class="kpis"><article><i>▤</i><div><small>إجمالي السجلات</small><b>24</b></div></article><article><i>◷</i><div><small>بانتظار الاعتماد</small><b>6</b></div></article><article><i>✓</i><div><small>مكتمل</small><b>18</b></div></article></div><div class="documents"><h3>أحدث السجلات</h3>${["اعتماد تحديث السياسات الداخلية","مراجعة بيانات الحضور الشهرية","تعميم تنظيم الإجازات"].map((x,i)=>`<div><i>▤</i><span><b>${x}</b><small>الإدارة العامة · منذ ${i+1} أيام</small></span><em>${i===1?"قيد المراجعة":"معتمد"}</em></div>`).join("")}</div>`;}
 
 $("#logout-btn").onclick=async()=>{if(state.demo){state.demo=false;state.bound=false;openAuth();}else await signOut(auth);};
 $("#global-search").oninput=e=>{state.search=e.target.value;if(state.page==="employees")renderEmployees();};
-initialize().catch(error=>{ $("#loading").innerHTML=`<b>تعذر تشغيل النظام</b><p>${escapeHtml(error.message)}</p>`; });
+$("[data-open-notifications]").onclick=()=>{state.page="notifications";renderNav();renderPage();};
+initialize().catch(error=>{$("#loading").innerHTML=`<b>تعذر تشغيل النظام</b><p>${escapeHtml(error.message)}</p>`;});
