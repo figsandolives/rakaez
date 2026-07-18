@@ -12,7 +12,11 @@ export const CONFIG = {
   n8n: {
     loginOtpUrl: "https://dvd-salary-connector-currencies.trycloudflare.com/webhook/hrms-login-otp",
     verifyOtpUrl: "https://dvd-salary-connector-currencies.trycloudflare.com/webhook/hrms-verify-otp",
-    whatsappSignupOtpUrl: "https://dvd-salary-connector-currencies.trycloudflare.com/webhook/hrms-login-otp",
-    whatsappSignupVerifyUrl: "https://dvd-salary-connector-currencies.trycloudflare.com/webhook/hrms-verify-otp"
+    emailOtpUrl: "",
+    whatsappSignupOtpUrl: ""
+  },
+  localAI: {
+    url: "http://127.0.0.1:1234/v1/chat/completions",
+    model: "local-model"
   }
 };
