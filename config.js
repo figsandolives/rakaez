@@ -16,7 +16,8 @@ export const CONFIG = {
     whatsappSignupOtpUrl: ""
   },
   localAI: {
-    url: "http://127.0.0.1:1234/v1/chat/completions",
-    model: "local-model"
+    provider: "ollama",
+    url: "http://127.0.0.1:11434/api/chat",
+    model: "qwen3.5:9b"
   }
 };
