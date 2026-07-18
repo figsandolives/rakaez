@@ -1,5 +1,5 @@
-import { CONFIG } from "./config.js";
-import { renderScheduleWorkspace } from "./schedules.js";
+import { CONFIG } from "./config.js?v=20260718-ollama";
+import { renderScheduleWorkspace } from "./schedules.js?v=20260718-ollama";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import { getAuth, browserLocalPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { getDatabase, ref, get, set, push, onValue, runTransaction, remove } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
