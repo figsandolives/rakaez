@@ -10,8 +10,8 @@ export const CONFIG = {
     measurementId: "G-JFC4SPKXDK"
   },
   n8n: {
-    loginOtpUrl: "https://dvd-salary-connector-currencies.trycloudflare.com/webhook/hrms-login-otp",
-    verifyOtpUrl: "https://dvd-salary-connector-currencies.trycloudflare.com/webhook/hrms-verify-otp",
+    loginOtpUrl: "https://burke-whereas-beginning-adding.trycloudflare.com/webhook/hrms-login-otp",
+    verifyOtpUrl: "https://burke-whereas-beginning-adding.trycloudflare.com/webhook/hrms-verify-otp",
     emailOtpUrl: "",
     whatsappSignupOtpUrl: ""
   },
