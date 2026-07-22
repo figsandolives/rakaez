@@ -31,7 +31,7 @@ function notes(){return Object.values(schedule?.notes||{});}
 function employeeById(id){return ctx.state.employees.find(employee=>employee.id===id);}
 function usedHours(employeeId){return assignments().filter(item=>item.employeeId===employeeId).reduce((sum,item)=>sum+Number(item.hours||0),0);}
 function remainingHours(employee){return Math.max(0,Number(employee.dailyHours||0)-usedHours(employee.id));}
-function documentLogos(){const companyLogo=ctx?.state?.settings?.companyLogoUrl;return`<div class="document-logos"><div class="document-company-logo">${companyLogo?`<img src="${esc(companyLogo)}" crossorigin="anonymous" alt="شعار المنشأة">`:'<span>شعار المنشأة</span>'}</div><div class="document-rakaez-logo"><img src="rakaez-mark.png" crossorigin="anonymous" alt="شعار ركائز"></div></div>`;}
+function documentLogos(){const companyLogo=ctx?.state?.settings?.companyLogoUrl||ctx?.state?.settings?.companyLogoDataUrl;return`<div class="document-logos"><div class="document-company-logo">${companyLogo?`<img src="${esc(companyLogo)}" crossorigin="anonymous" alt="شعار المنشأة">`:'<span>شعار المنشأة</span>'}</div><div class="document-rakaez-logo"><img src="rakaez-mark.png" crossorigin="anonymous" alt="شعار ركائز"></div></div>`;}
 
 export async function renderScheduleWorkspace(options){ctx=options;ctx.state.demoSchedules=ctx.state.demoSchedules||{};activeDay=null;schedule=null;renderDayFiles();}
 
