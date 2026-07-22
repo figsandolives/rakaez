@@ -9,5 +9,11 @@
 .alternate-phones{display:grid;gap:12px}
 .alternate-phone-row{display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:12px;align-items:end;margin-top:14px;padding-top:14px;border-top:1px solid #e4eaee}
 .relative-row .editable-phone{margin-top:0}
+.attendance-pin-slots{position:relative;min-height:62px;display:flex;align-items:center;padding:8px 14px;border:1px solid #41b8af;border-radius:14px;background:#f8fffe;box-shadow:0 0 0 4px rgba(20,162,151,.1);cursor:text;direction:ltr}
+.attendance-pin-slots:focus-within{border-color:var(--teal);box-shadow:0 0 0 5px rgba(20,162,151,.16)}
+.attendance-pin-slots input{position:absolute;inset:0;z-index:2;opacity:0;cursor:text}
+.pin-slot-display{width:100%;display:flex;align-items:center;gap:10px;direction:ltr;pointer-events:none}
+.pin-slot-display span{width:42px;height:43px;display:grid;place-items:center;border-bottom:2px solid #c6d2d9;color:#99a6b5;font-size:28px;font-weight:900;line-height:1}
+.pin-slot-display span.filled{border-color:var(--teal);color:var(--navy)}
 @media(max-width:700px){.employee-phones-group{max-width:none}.editable-phone{grid-template-columns:132px 1fr}.editable-phone .dial-select{min-width:132px;font-size:11px}.alternate-phone-row{grid-template-columns:1fr 34px}}
-@media(max-width:420px){.editable-phone{grid-template-columns:112px 1fr}.editable-phone .dial-select{min-width:112px;padding-inline:5px;font-size:10px}}
+@media(max-width:420px){.editable-phone{grid-template-columns:112px 1fr}.editable-phone .dial-select{min-width:112px;padding-inline:5px;font-size:10px}.pin-slot-display{gap:7px}.pin-slot-display span{width:34px;font-size:24px}}
