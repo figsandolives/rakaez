@@ -56,14 +56,7 @@ async function openDay(day){
   activeDay=day;ctx.container.innerHTML='<div class="schedule-loading"><i></i></div>';
   try{
     if(ctx.state.demo){schedule=ctx.state.demoSchedules[day.key]||emptySchedule(day);}
-    else{
-      const scheduleRef=ctx.ref(ctx.db,`organizations/default/schedules/${day.key}`);
-      const snap=await Promise.race([
-        ctx.get(scheduleRef),
-        new Promise((_,reject)=>setTimeout(()=>reject(new Error("انتهت مهلة تحميل الجدول")),12000))
-      ]);
-      schedule=snap.exists()?snap.val():emptySchedule(day);
-    }
+    else{const snap=await ctx.get(ctx.ref(ctx.db,`organizations/default/schedules/${day.key}`));schedule=snap.exists()?snap.val():emptySchedule(day);}
     renderDayWorkspace();
   }catch(error){
     schedule=emptySchedule(day);
