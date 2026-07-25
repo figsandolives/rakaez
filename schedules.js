@@ -171,7 +171,7 @@ async function translateWithLocalAI(){
     ? { model: ctx.CONFIG.localAI.model, stream: false, think: false, format: "json", options: { temperature: 0.05, num_predict: 1600 } }
     : { model: ctx.CONFIG.localAI.model || "local-model", temperature: 0.05 };
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  const timeout = setTimeout(() => controller.abort(new Error("translation-timeout")), 60000);
   let lastError = null;
   try {
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -200,7 +200,11 @@ async function translateWithLocalAI(){
         if (parsed) return parsed;
         lastError = new Error("استجابة الترجمة ليست بصيغة صالحة");
       } catch (error) {
-        lastError = error instanceof Error ? error : new Error("تعذرت الترجمة");
+        if (error?.name === "AbortError" || String(error?.message || "").includes("translation-timeout")) {
+          lastError = new Error("انتهت مهلة الترجمة قبل اكتمال الرد");
+        } else {
+          lastError = error instanceof Error ? error : new Error("تعذرت الترجمة");
+        }
       }
     }
     throw lastError || new Error("استجابة الترجمة ليست بصيغة صالحة");

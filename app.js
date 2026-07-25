@@ -11,6 +11,9 @@ const auth = getAuth(app);
 const db = getDatabase(app);
 const $ = selector => document.querySelector(selector);
 const state = { user:null, demo:false, page:"employees", employees:[], entities:["الإدارة العامة","فرع العاصمة","فرع الأحمدي"], settings:{companyLogoUrl:"",companyLogoDataUrl:""}, leaves:[], attendance:{}, legacyAttendance:{}, schedules:{}, fingerprintPlaces:[], attendanceFilter:null, search:"", pendingLogin:null, bound:false, draftSegments:[], profileEmployeeId:null, sessionExpired:false, signupInProgress:false, signupNotice:"" };
+if (window.location.search) {
+  window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash}`);
+}
 let attendanceRenderTimer=null;
 let otpResendTimer=null;
 
