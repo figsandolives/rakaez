@@ -138,8 +138,75 @@ function fallbackTranslation(){const employeeNames=Object.fromEntries(ctx.state.
 function validateTranslationShape(translation){if(!translation||typeof translation!=="object")return null;const expectedBranches=BRANCHES.map(branch=>branch.id),expectedAssignments=assignments().map(item=>item.id),expectedNotes=notes().map(note=>note.id),expectedEmployees=[...new Set([...assignments().map(item=>item.employeeId),...notes().map(note=>note.general?null:note.employeeId)].filter(Boolean))];if(typeof translation.title!=="string"||!translation.title.trim())return null;if(!translation.branchNames||typeof translation.branchNames!=="object")return null;if(!translation.employeeNames||typeof translation.employeeNames!=="object")return null;if(!translation.tasks||typeof translation.tasks!=="object")return null;if(!translation.notes||typeof translation.notes!=="object")return null;for(const branchId of expectedBranches)if(typeof translation.branchNames[branchId]!=="string"||!translation.branchNames[branchId].trim())return null;for(const employeeId of expectedEmployees)if(typeof translation.employeeNames[employeeId]!=="string"||!translation.employeeNames[employeeId].trim())return null;for(const assignmentId of expectedAssignments){const taskList=translation.tasks[assignmentId];if(!Array.isArray(taskList)||!taskList.length||taskList.some(task=>typeof task!=="string"||!task.trim()))return null;}for(const noteId of expectedNotes)if(typeof translation.notes[noteId]!=="string"||!translation.notes[noteId].trim())return null;return{title:translation.title.trim(),branchNames:{...translation.branchNames},employeeNames:{...translation.employeeNames},tasks:{...translation.tasks},notes:{...translation.notes}};}
 function parseTranslationResponse(payload){const candidates=[];if(typeof payload==="string")candidates.push(payload);else if(payload&&typeof payload==="object"){if(payload.title||payload.branchNames||payload.employeeNames||payload.tasks||payload.notes)return payload;candidates.push(payload.message?.content,payload.choices?.[0]?.message?.content,payload.content,payload.response);}for(const candidate of candidates){if(typeof candidate!=="string"||!candidate.trim())continue;const cleaned=candidate.trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/i,"");const snippets=[cleaned];const start=cleaned.indexOf("{"),end=cleaned.lastIndexOf("}");if(start>=0&&end>start)snippets.push(cleaned.slice(start,end+1));for(const snippet of snippets)try{const parsed=JSON.parse(snippet);if(parsed&&typeof parsed==="object")return parsed;}catch{}}return null;}
 async function translateWithLocalAI(){
-  const compact={day:schedule.dayName,date:displayDate(activeDay.date),branches:BRANCHES.map(branch=>({id:branch.id,name:branch.name,assignments:assignments().filter(item=>item.branchId===branch.id).map(item=>({id:item.id,employeeId:item.employeeId,employee:firstName(employeeById(item.employeeId)?.fullName),from:formatTime(item.from),to:formatTime(item.to),tasks:item.tasks}))})),notes:notes().map(note=>({id:note.id,employee:note.general?"عام":firstName(employeeById(note.employeeId)?.fullName),text:note.text}))};
-  const ollama=ctx.CONFIG.localAI.provider==="ollama",baseMessages=[{role:"system",content:"You are a professional HR schedule translator. Translate the supplied Arabic schedule into clear professional English. Return JSON only with this exact shape: {title, branchNames:{branchId:englishName}, employeeNames:{employeeId:englishFirstName}, tasks:{assignmentId:[english tasks]}, notes:{noteId:englishNote}}. Preserve all IDs. Every employee referenced anywhere, including notes, must have a Latin-script English first name in employeeNames. Do not omit any keys. Do not add extra text."},{role:"user",content:JSON.stringify(compact)}],requestBase=ollama?{model:ctx.CONFIG.localAI.model,stream:false,think:false,format:"json",options:{temperature:.05,num_predict:1600}}:{model:ctx.CONFIG.localAI.model||"local-model",temperature:.05},controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);let lastError=null;for(let attempt=0;attempt<3;attempt++){const messages=attempt===0?baseMessages:[...baseMessages,{role:"user",content:`The previous response was invalid or incomplete. Fix it and return a complete JSON object only. Required employee IDs: ${compact.branches.flatMap(branch=>branch.assignments.map(item=>item.employeeId)).filter(Boolean).join(", ") || "none"}. Required assignment IDs: ${compact.branches.flatMap(branch=>branch.assignments.map(item=>item.id)).join(", ") || "none"}. Required note IDs: ${compact.notes.map(note=>note.id).join(", ") || "none"}.` }],request={...requestBase,messages};try{const response=await fetch(ctx.CONFIG.localAI.url,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(request),signal:controller.signal});if(!response.ok)throw new Error("لم يستجب نموذج الذكاء الاصطناعي");let payload;try{payload=await response.json();}catch{payload=await response.text();}const parsed=validateTranslationShape(parseTranslationResponse(payload));if(parsed)return parsed;lastError=new Error("استجابة الترجمة ليست بصيغة صالحة");}catch(error){lastError=error instanceof Error?error:new Error("تعذرت الترجمة");}}throw lastError||new Error("استجابة الترجمة ليست بصيغة صالحة");finally{clearTimeout(timeout);}
+  const compact={
+    day: schedule.dayName,
+    date: displayDate(activeDay.date),
+    branches: BRANCHES.map(branch => ({
+      id: branch.id,
+      name: branch.name,
+      assignments: assignments().filter(item => item.branchId === branch.id).map(item => ({
+        id: item.id,
+        employeeId: item.employeeId,
+        employee: firstName(employeeById(item.employeeId)?.fullName),
+        from: formatTime(item.from),
+        to: formatTime(item.to),
+        tasks: item.tasks
+      }))
+    })),
+    notes: notes().map(note => ({
+      id: note.id,
+      employee: note.general ? "عام" : firstName(employeeById(note.employeeId)?.fullName),
+      text: note.text
+    }))
+  };
+  const ollama = ctx.CONFIG.localAI.provider === "ollama";
+  const baseMessages = [
+    {
+      role: "system",
+      content: "You are a professional HR schedule translator. Translate the supplied Arabic schedule into clear professional English. Return JSON only with this exact shape: {title, branchNames:{branchId:englishName}, employeeNames:{employeeId:englishFirstName}, tasks:{assignmentId:[english tasks]}, notes:{noteId:englishNote}}. Preserve all IDs. Every employee referenced anywhere, including notes, must have a Latin-script English first name in employeeNames. Do not omit any keys. Do not add extra text."
+    },
+    { role: "user", content: JSON.stringify(compact) }
+  ];
+  const requestBase = ollama
+    ? { model: ctx.CONFIG.localAI.model, stream: false, think: false, format: "json", options: { temperature: 0.05, num_predict: 1600 } }
+    : { model: ctx.CONFIG.localAI.model || "local-model", temperature: 0.05 };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  let lastError = null;
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const messages = attempt === 0
+        ? baseMessages
+        : [...baseMessages, {
+            role: "user",
+            content: `The previous response was invalid or incomplete. Fix it and return a complete JSON object only. Required employee IDs: ${compact.branches.flatMap(branch => branch.assignments.map(item => item.employeeId)).filter(Boolean).join(", ") || "none"}. Required assignment IDs: ${compact.branches.flatMap(branch => branch.assignments.map(item => item.id)).join(", ") || "none"}. Required note IDs: ${compact.notes.map(note => note.id).join(", ") || "none"}.`
+          }];
+      const request = { ...requestBase, messages };
+      try {
+        const response = await fetch(ctx.CONFIG.localAI.url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(request),
+          signal: controller.signal
+        });
+        if (!response.ok) throw new Error("لم يستجب نموذج الذكاء الاصطناعي");
+        let payload;
+        try {
+          payload = await response.json();
+        } catch {
+          payload = await response.text();
+        }
+        const parsed = validateTranslationShape(parseTranslationResponse(payload));
+        if (parsed) return parsed;
+        lastError = new Error("استجابة الترجمة ليست بصيغة صالحة");
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error("تعذرت الترجمة");
+      }
+    }
+    throw lastError || new Error("استجابة الترجمة ليست بصيغة صالحة");
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function pdfPage(language){const english=language==="en",translation=schedule.translation||{},time=english?formatEnglishTime:formatTime,employeeName=id=>translation.employeeNames?.[id]||firstName(employeeById(id)?.fullName);return`<section class="pdf-page ${english?"english":"arabic"}" dir="${english?"ltr":"rtl"}"><header>${documentLogos()}<h1>${english?esc(translation.title||`Branch Schedule — ${schedule.dayName} ${displayDate(activeDay.date)}`):`جدول دوام الأفرع ${schedule.dayName} ${displayDate(activeDay.date)}`}</h1></header>${BRANCHES.map(branch=>`<div class="pdf-branch" style="--branch:${branch.color}"><h2>${english?esc(translation.branchNames?.[branch.id]||branch.name):branch.name}</h2><div>${assignments().filter(item=>item.branchId===branch.id).map(item=>{const breakMinutes=Math.max(0,Number(item.breakMinutes||0));return`<article><b>${english?esc(employeeName(item.employeeId)):esc(firstName(employeeById(item.employeeId)?.fullName))}</b><span>${time(item.from)} — ${time(item.to)}</span>${breakMinutes?`<small class="pdf-break">${english?`Break: ${formatHours(breakMinutes)} min`:`بريك: ${formatHours(breakMinutes)} دقيقة`}</small>`:""}<p>${english?(translation.tasks?.[item.id]||item.tasks).map(esc).join(" + "):item.tasks.map(esc).join(" + ")}</p></article>`;}).join("")||`<p class="pdf-empty">${english?"No assignments":"لا يوجد دوام"}</p>`}</div></div>`).join("")}<footer class="pdf-notes"><h3>${english?"Notes":"الملاحظات"}</h3><div>${notes().map(note=>`<article class="pdf-note"><b>${note.general?(english?"General":"عام"):(english?esc(employeeName(note.employeeId)):esc(firstName(employeeById(note.employeeId)?.fullName)))}:</b><p>${english?esc(translation.notes?.[note.id]||note.text):esc(note.text)}</p></article>`).join("")||`<p class="pdf-empty">${english?"No notes":"لا توجد ملاحظات"}</p>`}</div></footer></section>`;}
