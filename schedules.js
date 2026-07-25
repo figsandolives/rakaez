@@ -118,15 +118,21 @@ function openNoteModal(){
 
 function openPublishLoading(){
   const root=$("#modal-root");
-  root.innerHTML=`<div class="schedule-publish-loading" role="status" aria-live="polite"><section class="publish-progress-card"><div class="publish-orbit" aria-hidden="true"><i></i><i></i><span>✦</span></div><span class="publish-kicker">ركائز HRMS</span><h2 id="publish-loading-title">جاري ترجمة جدول الدوامات ونشرها...</h2><p id="publish-loading-message">نراجع التوزيع ثم نجهّز النسخة الإنجليزية الاحترافية للموظفين.</p><div class="publish-progress-track" aria-label="تقدّم عملية النشر"><span id="publish-progress-bar" style="width:8%"></span></div><div class="publish-progress-meta"><b id="publish-progress-value">8%</b><span id="publish-progress-remaining">الوقت المتوقع: أقل من دقيقة</span></div><ol class="publish-steps"><li data-publish-step="1" class="active"><i>1</i><span>حفظ توزيع الدوامات</span></li><li data-publish-step="2"><i>2</i><span>إرسال الجدول للترجمة</span></li><li data-publish-step="3"><i>3</i><span>تجهيز النسخة الإنجليزية</span></li><li data-publish-step="4"><i>4</i><span>نشر الجدول للموظفين</span></li></ol></section></div>`;
+  root.innerHTML=`<div class="schedule-publish-loading" role="status" aria-live="polite"><section class="publish-progress-card"><div class="publish-orbit" aria-hidden="true"><i></i><i></i><span>✦</span></div><span class="publish-kicker">ركائز HRMS</span><h2 id="publish-loading-title">جاري ترجمة جدول الدوامات ونشرها...</h2><p id="publish-loading-message">نراجع التوزيع ثم نجهّز النسخة الإنجليزية الاحترافية للموظفين.</p><div class="publish-progress-track" aria-label="تقدّم عملية النشر"><span id="publish-progress-bar" style="width:8%"></span></div><div class="publish-progress-meta"><b id="publish-progress-value">8%</b><span id="publish-progress-remaining">نقدّر الوقت المتبقي أثناء الترجمة...</span></div><ol class="publish-steps"><li data-publish-step="1" class="active"><i>1</i><span>حفظ توزيع الدوامات</span></li><li data-publish-step="2"><i>2</i><span>إرسال الجدول للترجمة</span></li><li data-publish-step="3"><i>3</i><span>تجهيز النسخة الإنجليزية</span></li><li data-publish-step="4"><i>4</i><span>نشر الجدول للموظفين</span></li></ol></section></div>`;
   return root;
 }
 function setPublishProgress(percent,{title,message,remaining,step}={}){const value=Math.max(0,Math.min(100,Math.round(percent)));$("#publish-progress-bar")&&( $("#publish-progress-bar").style.width=`${value}%` );$("#publish-progress-value")&&($("#publish-progress-value").textContent=`${value}%`);title&&($("#publish-loading-title").textContent=title);message&&($("#publish-loading-message").textContent=message);remaining&&($("#publish-progress-remaining").textContent=remaining);document.querySelectorAll("[data-publish-step]").forEach(item=>{const itemStep=Number(item.dataset.publishStep);item.classList.toggle("active",itemStep===step);item.classList.toggle("complete",itemStep<step);});}
-function startTranslationProgress(){let progress=42,elapsed=0;return setInterval(()=>{elapsed+=2;progress=Math.min(88,progress+(progress<70?5:2));const seconds=Math.max(5,32-elapsed);setPublishProgress(progress,{title:"جاري ترجمة جدول الدوامات...",message:"يقوم الذكاء الاصطناعي بصياغة نسخة إنجليزية واضحة واحترافية.",remaining:seconds>8?`الوقت المتوقع المتبقي: ${seconds} ثانية`:"الوقت المتوقع المتبقي: لحظات",step:3});},2000);}
+const translationStatsKey="rakaez.translation.stats";
+function readTranslationStats(){try{const raw=localStorage.getItem(translationStatsKey);if(!raw)return null;const parsed=JSON.parse(raw);const avgSeconds=Number(parsed?.avgSeconds);if(!Number.isFinite(avgSeconds)||avgSeconds<=0)return null;return{avgSeconds,count:Number(parsed?.count)||0};}catch{return null;}}
+function writeTranslationStats(seconds){try{const current=readTranslationStats(),safeSeconds=Math.max(1,Math.round(seconds)),next=current?Math.round((current.avgSeconds*0.7)+(safeSeconds*0.3)):safeSeconds;localStorage.setItem(translationStatsKey,JSON.stringify({avgSeconds:next,count:(current?.count||0)+1}));}catch{}}
+function translationWorkUnits(){const taskChars=assignments().reduce((sum,item)=>sum+String(item.tasks?.join(" ")).length,0),noteChars=notes().reduce((sum,note)=>sum+String(note.text||"").length,0),employeeCount=assignments().length+notes().length;return(taskChars/28)+(noteChars/35)+(employeeCount*1.5);}
+function translationEstimateSeconds(){const units=translationWorkUnits(),base=Math.max(20,Math.min(600,Math.round(18+(units*3.2)))),history=readTranslationStats()?.avgSeconds;return history?Math.max(15,Math.min(600,Math.round((history*0.55)+(base*0.45)))):base;}
+function etaLabel(seconds){const safe=Math.max(1,Math.round(seconds));return safe>=120?`الوقت المتبقي التقريبي: ${Math.ceil(safe/60)} دقيقة`:`الوقت المتبقي التقريبي: ${safe} ثانية`;}
+function startTranslationProgress(){const estimatedTotal=translationEstimateSeconds();const startedAt=Date.now();let progress=42;setPublishProgress(progress,{title:"جاري ترجمة جدول الدوامات...",message:"الذكاء الاصطناعي يجهز النسخة الإنجليزية النهائية الآن.",remaining:etaLabel(estimatedTotal),step:3});return{timer:setInterval(()=>{const elapsed=(Date.now()-startedAt)/1000;progress=Math.min(92,42+Math.min(50,Math.round((elapsed/estimatedTotal)*50)));const remaining=Math.max(1,estimatedTotal-elapsed);setPublishProgress(progress,{title:"جاري ترجمة جدول الدوامات...",message:"الذكاء الاصطناعي يجهز النسخة الإنجليزية النهائية الآن.",remaining:etaLabel(remaining),step:3});},2000),startedAt,estimatedTotal};}
 async function publishSchedule(){
   const root=openPublishLoading();
-  let translationTimer=null;
-  try{setPublishProgress(16,{title:"جاري تجهيز جدول الدوامات...",message:"يتم حفظ التوزيع الحالي لضمان وصوله للموظفين بدقة.",remaining:"الوقت المتوقع: أقل من دقيقة",step:1});schedule.published=true;schedule.publishedAt=Date.now();schedule.translationError=null;schedule.translation=null;await persistSchedule();setPublishProgress(38,{title:"جاري إرسال الجدول للترجمة...",message:"تم حفظ الجدول، وننتظر الآن النسخة الإنجليزية الاحترافية.",remaining:"الوقت المتوقع المتبقي: حوالي 30 ثانية",step:2});if(ctx.CONFIG.localAI?.url){translationTimer=startTranslationProgress();try{const translation=await translateWithLocalAI();clearInterval(translationTimer);translationTimer=null;schedule.translation=translation;setPublishProgress(92,{title:"اكتملت الترجمة بنجاح",message:"نراجع النسخة النهائية وننشر الجدول لجميع الموظفين.",remaining:"الوقت المتوقع المتبقي: ثوانٍ قليلة",step:4});await persistSchedule();}catch(error){clearInterval(translationTimer);translationTimer=null;schedule.translationError=error.message||"استجابة الترجمة ليست بصيغة صالحة";setPublishProgress(86,{title:"تعذر الوصول لخدمة الترجمة",message:"لن يظهر زر التحميل حتى تنجح الترجمة بالكامل.",remaining:"جاري إنهاء النشر...",step:4});await persistSchedule();}}else{schedule.translationError="لم يتم إعداد خدمة الترجمة المحلية بعد.";setPublishProgress(86,{title:"جاري نشر الجدول",message:"خدمة الترجمة غير مهيّأة حالياً، ولن يتاح التحميل حتى تكتمل.",remaining:"الوقت المتوقع المتبقي: ثوانٍ قليلة",step:4});await persistSchedule();}await new Promise(resolve=>setTimeout(resolve,700));setPublishProgress(100,{title:"تم نشر جدول الدوامات",message:"أصبح الجدول متاحاً للموظفين، والتحميل سيظهر فقط بعد اكتمال الترجمة.",remaining:"اكتملت العملية",step:5});await new Promise(resolve=>setTimeout(resolve,550));ctx.showToast(schedule.translation?"تم نشر الجدول للموظفين":"تم نشر الجدول، لكن التحميل ينتظر اكتمال الترجمة");}finally{translationTimer&&clearInterval(translationTimer);root.innerHTML="";renderDayWorkspace();}
+  let translationProgress=null;
+  try{setPublishProgress(16,{title:"جاري تجهيز جدول الدوامات...",message:"يتم حفظ التوزيع الحالي لضمان وصوله للموظفين بدقة.",remaining:"الوقت المتوقع: أقل من دقيقة",step:1});schedule.published=true;schedule.publishedAt=Date.now();schedule.translationError=null;schedule.translation=null;await persistSchedule();setPublishProgress(38,{title:"جاري إرسال الجدول للترجمة...",message:"تم حفظ الجدول، وننتظر الآن النسخة الإنجليزية الاحترافية.",remaining:"نبدأ الآن بحساب الوقت المتبقي التقريبي",step:2});if(ctx.CONFIG.localAI?.url){translationProgress=startTranslationProgress();try{const translationStartedAt=translationProgress.startedAt;const translation=await translateWithLocalAI();translationProgress.timer&&clearInterval(translationProgress.timer);schedule.translation=translation;writeTranslationStats((Date.now()-translationStartedAt)/1000);translationProgress=null;setPublishProgress(92,{title:"اكتملت الترجمة بنجاح",message:"نراجع النسخة النهائية وننشر الجدول لجميع الموظفين.",remaining:"الوقت المتبقي: لحظات",step:4});await persistSchedule();}catch(error){translationProgress?.timer&&clearInterval(translationProgress.timer);translationProgress=null;schedule.translationError=error.message||"استجابة الترجمة ليست بصيغة صالحة";setPublishProgress(86,{title:"تعذر الوصول لخدمة الترجمة",message:"لن يظهر زر التحميل حتى تنجح الترجمة بالكامل.",remaining:"انتظر حتى تنتهي المعالجة الحالية",step:4});await persistSchedule();}}else{schedule.translationError="لم يتم إعداد خدمة الترجمة المحلية بعد.";setPublishProgress(86,{title:"جاري نشر الجدول",message:"خدمة الترجمة غير مهيّأة حالياً، ولن يتاح التحميل حتى تكتمل.",remaining:"التحميل متوقف حتى إعداد الترجمة",step:4});await persistSchedule();}await new Promise(resolve=>setTimeout(resolve,700));setPublishProgress(100,{title:"تم نشر جدول الدوامات",message:"أصبح الجدول متاحاً للموظفين، والتحميل سيظهر فقط بعد اكتمال الترجمة.",remaining:"اكتملت العملية",step:5});await new Promise(resolve=>setTimeout(resolve,550));ctx.showToast(schedule.translation?"تم نشر الجدول للموظفين":"تم نشر الجدول، لكن التحميل ينتظر اكتمال الترجمة");}finally{translationProgress?.timer&&clearInterval(translationProgress.timer);root.innerHTML="";renderDayWorkspace();}
 }
 
 const fallbackBranchNames={hawalli:"Hawalli Branch Schedule",abu_al_hasaniya:"Abu Al Hasaniya Branch Schedule",yarmouk:"Yarmouk Branch Schedule"};
@@ -170,8 +176,6 @@ async function translateWithLocalAI(){
   const requestBase = ollama
     ? { model: ctx.CONFIG.localAI.model, stream: false, think: false, format: "json", options: { temperature: 0.05, num_predict: 1600 } }
     : { model: ctx.CONFIG.localAI.model || "local-model", temperature: 0.05 };
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(new Error("translation-timeout")), 60000);
   let lastError = null;
   try {
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -186,8 +190,7 @@ async function translateWithLocalAI(){
         const response = await fetch(ctx.CONFIG.localAI.url, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(request),
-          signal: controller.signal
+          body: JSON.stringify(request)
         });
         if (!response.ok) throw new Error("لم يستجب نموذج الذكاء الاصطناعي");
         let payload;
@@ -200,16 +203,11 @@ async function translateWithLocalAI(){
         if (parsed) return parsed;
         lastError = new Error("استجابة الترجمة ليست بصيغة صالحة");
       } catch (error) {
-        if (error?.name === "AbortError" || String(error?.message || "").includes("translation-timeout")) {
-          lastError = new Error("انتهت مهلة الترجمة قبل اكتمال الرد");
-        } else {
-          lastError = error instanceof Error ? error : new Error("تعذرت الترجمة");
-        }
+        lastError = error instanceof Error ? error : new Error("تعذرت الترجمة");
       }
     }
     throw lastError || new Error("استجابة الترجمة ليست بصيغة صالحة");
   } finally {
-    clearTimeout(timeout);
   }
 }
 
