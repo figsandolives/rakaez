@@ -10,10 +10,11 @@ export const CONFIG = {
     measurementId: "G-JFC4SPKXDK"
   },
   n8n: {
+    employeeMessagesEnabled: false,
     loginOtpUrl: "https://burke-whereas-beginning-adding.trycloudflare.com/webhook/hrms-login-otp",
     verifyOtpUrl: "https://burke-whereas-beginning-adding.trycloudflare.com/webhook/hrms-verify-otp",
     scheduleTranslationUrl: "https://burke-whereas-beginning-adding.trycloudflare.com/webhook/hrms-schedule-translate",
-    scheduleWhatsappUrl: "https://burke-whereas-beginning-adding.trycloudflare.com/webhook/hrms-schedule-whatsapp",
+    scheduleWhatsappUrl: "",
     emailOtpUrl: "",
     whatsappSignupOtpUrl: ""
   },
