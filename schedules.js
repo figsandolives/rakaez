@@ -6,6 +6,7 @@ const BRANCHES=[
   {id:"abu_al_hasaniya",name:"دوام فرع أبو الحصانية",color:"#8b5fc7",wash:"#f3edfb"},
   {id:"yarmouk",name:"دوام فرع اليرموك",color:"#e29328",wash:"#fff5e5"}
 ];
+const whatsappBranchNames={hawalli:"حولي",abu_al_hasaniya:"أبو الحصانية",yarmouk:"اليرموك"};
 
 let ctx=null;
 let activeDay=null;
@@ -190,7 +191,7 @@ function scheduleWhatsappMessages(){
     let message;
     if(weeklyLeave)message=arabic?`مرحباً ${name}\n\nإجازتك الأسبوعية غداً\nإجازة سعيدة.`:`Hello ${name}\n\nYour weekly day off is tomorrow.\nHave a happy day off.`;
     else{
-      const shifts=employeeAssignments.map(item=>{const branch=BRANCHES.find(value=>value.id===item.branchId);const times=arabic?`${formatTime(item.from)} — ${formatTime(item.to)}`:`${formatEnglishTime(item.from)} — ${formatEnglishTime(item.to)}`;const branchName=arabic?branch?.name||item.branchId:translation.branchNames?.[item.branchId]||branch?.name||item.branchId;const tasks=arabic?item.tasks:(translation.tasks?.[item.id]||[]);return arabic?`• ${times}\nالفرع: ${branchName}\nالمهام: ${tasks.join("، ")}`:`• ${times}\nBranch: ${branchName}\nTasks: ${tasks.join(", ")}`;}).join("\n\n");
+      const shifts=employeeAssignments.map(item=>{const branch=BRANCHES.find(value=>value.id===item.branchId);const times=arabic?`${formatTime(item.from)} — ${formatTime(item.to)}`:`${formatEnglishTime(item.from)} — ${formatEnglishTime(item.to)}`;const branchName=arabic?whatsappBranchNames[item.branchId]||branch?.name||item.branchId:(translation.branchNames?.[item.branchId]||branch?.name||item.branchId).replace(/\\s*Branch Schedule$/i,"");const tasks=arabic?item.tasks:(translation.tasks?.[item.id]||[]);return arabic?`• ${times}\nالفرع: ${branchName}\nالمهام: ${tasks.join("، ")}`:`• ${times}\nBranch: ${branchName}\nTasks: ${tasks.join(", ")}`;}).join("\n\n");
       const relevantNotes=[...employeeNotes,...(employeeAssignments.length?generalNotes:[])];const noteText=relevantNotes.map(note=>arabic?note.text:translation.notes?.[note.id]).filter(Boolean);const notesText=noteText.length?arabic?`\n\nملاحظات:\n${noteText.map(note=>`• ${note}`).join("\n")}`:`\n\nNotes:\n${noteText.map(note=>`• ${note}`).join("\n")}`:"";
       message=arabic?`مرحباً ${name}\n\nمهام عملك غداً كالتالي:\n\n${shifts}${notesText}`:`Hello ${name}\n\nYour work duties for tomorrow are:\n\n${shifts}${notesText}`;
     }
