@@ -1,7 +1,7 @@
 // Keep the AI connection files versioned so GitHub Pages never reuses an
 // outdated browser-cached endpoint after a deployment.
-import { CONFIG } from "./config.js?v=20260727-schedule-whatsapp";
-import { renderScheduleWorkspace } from "./schedules.js?v=20260727-schedule-whatsapp";
+import { CONFIG } from "./config.js?v=20260727-two-names";
+import { renderScheduleWorkspace } from "./schedules.js?v=20260727-two-names";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import { getAuth, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { getDatabase, ref, get, set, push, onValue, remove } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";

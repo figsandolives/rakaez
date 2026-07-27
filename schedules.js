@@ -15,7 +15,7 @@ let draggingAssignmentId="";
 
 const $=selector=>document.querySelector(selector);
 const esc=(value="")=>String(value).replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
-const firstName=(name="")=>String(name).trim().split(/\s+/)[0]||"موظف";
+const firstName=(name="")=>String(name).trim().split(/\s+/).slice(0,2).join(" ")||"موظف";
 const initials=(name="")=>String(name).trim().split(/\s+/).slice(0,2).map(x=>x[0]||"").join("");
 const formatHours=n=>Number.isInteger(n)?String(n):String(Math.round(n*100)/100);
 const latinDigits=value=>String(value??"").replace(/[٠-٩]/g,d=>"٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[۰-۹]/g,d=>"۰۱۲۳۴۵۶۷۸۹".indexOf(d));
