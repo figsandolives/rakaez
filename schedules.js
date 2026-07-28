@@ -43,6 +43,7 @@ function weeklyDaysFor(leave){const stored=Array.isArray(leave?.weeklyDays)?leav
 function leaveForDay(employeeId,key=activeDay?.key){if(!key)return null;const date=new Date(`${key}T12:00:00`),matching=(ctx?.state?.leaves||[]).filter(leave=>{if(leave.employeeId!==employeeId)return false;if(leave.type==="weekly")return weeklyDaysFor(leave).includes(date.getDay());return leave.startDate<=key&&leave.endDate>=key&&!(leave.skipEnabled&&Number(leave.skipWeekday)===date.getDay());});return matching.sort((a,b)=>(b.duration==="full")-(a.duration==="full")||Number(b.createdAt||0)-Number(a.createdAt||0))[0]||null;}
 function availableWorkHours(employee){const leave=leaveForDay(employee.id),base=Math.max(0,Number(employee.dailyHours||0));if(leave?.duration==="full")return 0;if(leave?.duration==="half")return base/2;return base;}
 function remainingHours(employee){return Math.max(0,availableWorkHours(employee)-usedHours(employee.id));}
+function incompleteScheduleEmployees(){return ctx.state.employees.filter(employee=>remainingHours(employee)>0.001);}
 function leaveNotesForDay(){return ctx.state.employees.map(employee=>({employee,leave:leaveForDay(employee.id)})).filter(item=>item.leave&&(item.leave.type==="weekly"||item.leave.type==="sick"));}
 function documentLogos(){const companyLogo=ctx?.state?.settings?.companyLogoUrl||ctx?.state?.settings?.companyLogoDataUrl;return`<div class="document-logos"><div class="document-company-logo">${companyLogo?`<img src="${esc(companyLogo)}" crossorigin="anonymous" alt="شعار المنشأة">`:'<span>شعار المنشأة</span>'}</div><div class="document-rakaez-logo"><img src="rakaez-mark.png" crossorigin="anonymous" alt="شعار ركائز"></div></div>`;}
 
@@ -229,7 +230,17 @@ async function notifyScheduleByWhatsapp(){
   if(!response.ok||payload?.ok===false)throw new Error(payload?.message||"تعذر إرسال إشعارات واتساب.");
   return{sent:Number(payload?.sent??notifications.length),skipped:Number(payload?.skipped??0)};
 }
+function openIncompleteScheduleModal(employees){
+  const root=document.querySelector("#modal-root");
+  root.innerHTML=`<div class="modal-backdrop schedule-publish-blocked-backdrop"><section class="modal schedule-publish-blocked-modal" role="dialog" aria-modal="true" aria-labelledby="schedule-publish-blocked-title"><header><div><span>مراجعة الجدول</span><h3 id="schedule-publish-blocked-title">تعذر النشر</h3></div><button type="button" class="modal-close" aria-label="إغلاق">×</button></header><div class="schedule-publish-blocked-content"><div class="schedule-publish-blocked-icon" aria-hidden="true">!</div><p>يرجى إكمال دوام الموظفين:</p><ul>${employees.map(employee=>`<li>${esc(employee.fullName||"موظف")}</li>`).join("")}</ul></div><footer><button id="close-publish-blocked" type="button" class="primary">إغلاق</button></footer></section></div>`;
+  const close=()=>{root.innerHTML="";};
+  root.querySelector(".modal-close").onclick=close;
+  root.querySelector("#close-publish-blocked").onclick=close;
+  root.querySelector(".schedule-publish-blocked-backdrop").onclick=event=>{if(event.target.classList.contains("schedule-publish-blocked-backdrop"))close();};
+}
 async function publishSchedule(){
+  const incompleteEmployees=incompleteScheduleEmployees();
+  if(incompleteEmployees.length){openIncompleteScheduleModal(incompleteEmployees);return;}
   if(!scheduleTranslationsReady()){ctx.showToast("أكمل الاسم الإنجليزي لكل موظف في الجدول وترجم المهام والملاحظات أولاً.");return;}
   const root=openPublishLoading();
   try{setPublishProgress(20,{title:"جاري حفظ جدول الدوامات...",message:"نحفظ التوزيع والترجمات التي راجعتها.",remaining:"الوقت المتوقع: بضع ثوانٍ",step:1});schedule.published=true;schedule.publishedAt=Date.now();schedule.translationError=null;await persistSchedule();setPublishProgress(52,{title:"تم التحقق من الترجمات",message:"كل مهمة وملاحظة تحتوي ترجمتها الإنجليزية المحفوظة.",remaining:"جاري تجهيز الصفحات",step:2});schedule.translation=savedItemTranslation();setPublishProgress(78,{title:"جاري تجهيز صفحات الجدول...",message:"نجهز النسختين العربية والإنجليزية وإشعارات الموظفين.",remaining:"متبقي ثوانٍ قليلة",step:3});await persistSchedule();await publishEmployeeAppNotifications();schedule.whatsappNotification={status:"disabled",sent:0,at:Date.now()};setPublishProgress(100,{title:"تم نشر جدول الدوامات",message:"وصل إشعار شخصي في تطبيق البصمة لكل موظف لديه دوام أو ملاحظة.",remaining:"اكتملت العملية",step:4});await persistSchedule();await new Promise(resolve=>setTimeout(resolve,250));ctx.showToast("تم نشر الجدول وإشعارات الموظفين في تطبيق البصمة");}finally{root.innerHTML="";renderDayWorkspace();}
