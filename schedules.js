@@ -180,6 +180,25 @@ function etaLabel(seconds){const safe=Math.max(1,Math.round(seconds));return saf
 function startTranslationProgress(){const estimatedTotal=translationEstimateSeconds();const startedAt=Date.now();let progress=42;setPublishProgress(progress,{title:"جاري ترجمة جدول الدوامات...",message:"الذكاء الاصطناعي يجهز النسخة الإنجليزية النهائية الآن.",remaining:etaLabel(estimatedTotal),step:3});return{timer:setInterval(()=>{const elapsed=(Date.now()-startedAt)/1000;progress=Math.min(92,42+Math.min(50,Math.round((elapsed/estimatedTotal)*50)));const remaining=Math.max(1,estimatedTotal-elapsed);setPublishProgress(progress,{title:"جاري ترجمة جدول الدوامات...",message:"الذكاء الاصطناعي يجهز النسخة الإنجليزية النهائية الآن.",remaining:etaLabel(remaining),step:3});},2000),startedAt,estimatedTotal};}
 function scheduleTranslationsReady(){const employeeIds=[...new Set([...assignments().map(item=>item.employeeId),...notes().map(note=>note.general?null:note.employeeId)].filter(Boolean))];return employeeIds.every(id=>String(employeeById(id)?.fullNameEn||"").trim())&&assignments().every(item=>Array.isArray(item.taskTranslations)&&item.taskTranslations.length===item.tasks.length&&item.taskTranslations.every((translation,index)=>translation?.source===item.tasks[index]&&String(translation?.text||"").trim()))&&notes().every(note=>note.translationSource===note.text&&String(note.translation||"").trim());}
 function savedItemTranslation(){const employeeNames=Object.fromEntries(ctx.state.employees.map(employee=>[employee.id,String(employee.fullNameEn||"").trim()]));return{title:`Branch Schedule - ${titleCase({السبت:"Saturday",الأحد:"Sunday",الاثنين:"Monday",الثلاثاء:"Tuesday",الأربعاء:"Wednesday",الخميس:"Thursday",الجمعة:"Friday"}[schedule.dayName]||schedule.dayName)} ${displayDate(activeDay.date)}`,branchNames:fallbackBranchNames,employeeNames,tasks:Object.fromEntries(assignments().map(item=>[item.id,item.taskTranslations.map(translation=>translation.text.trim())])),notes:Object.fromEntries(notes().map(note=>[note.id,note.translation.trim()]))};}
+async function publishEmployeeAppNotifications(){
+  const publishedAt=Number(schedule.publishedAt)||Date.now(),generalNotes=notes().filter(note=>note.general);
+  if(ctx.state.demo){schedule.demoNotificationCount=ctx.state.employees.filter(employee=>assignments().some(item=>item.employeeId===employee.id)||notes().some(note=>!note.general&&note.employeeId===employee.id)||leaveForDay(employee.id,activeDay.key)).length;return;}
+  await Promise.all(ctx.state.employees.map(employee=>{
+    const employeeShifts=assignments().filter(item=>item.employeeId===employee.id);
+    const employeeNotes=notes().filter(note=>!note.general&&note.employeeId===employee.id);
+    const relevantNotes=[...employeeNotes,...(employeeShifts.length?generalNotes:[])];
+    const leave=leaveForDay(employee.id,activeDay.key);
+    const shouldNotify=employeeShifts.length||employeeNotes.length||leave;
+    const notification=shouldNotify?{
+      id:`schedule-${activeDay.key}`,type:"schedule",employeeId:employee.id,
+      scheduleDate:activeDay.key,dayName:schedule.dayName,publishedAt,createdAt:publishedAt,read:false,
+      leave:leave?{type:leave.type||"leave",duration:leave.duration||"full"}:null,
+      shifts:employeeShifts.map(item=>({id:item.id,branchId:item.branchId,from:item.from,to:item.to,tasks:item.tasks||[],taskTranslations:item.taskTranslations||[]})),
+      notes:relevantNotes.map(note=>({id:note.id,text:note.text,translation:note.translation||"",general:Boolean(note.general)}))
+    }:null;
+    return ctx.set(ctx.ref(ctx.db,`organizations/default/employeeNotifications/${employee.id}/schedule-${activeDay.key}`),notification);
+  }));
+}
 const arabicNationalityTerms=["الكويت","كويتي","السعود","سعودي","الامارات","الإمارات","اماراتي","إماراتي","قطر","قطري","البحرين","بحريني","عمان","عماني","العراق","عراقي","الاردن","الأردن","اردني","أردني","فلسطين","فلسطيني","لبنان","لبناني","سوريا","سوري","مصر","مصري","اليمن","يمني","السودان","سوداني","ليبيا","ليبي","تونس","تونسي","الجزائر","جزائري","المغرب","مغربي","موريتانيا","موريتاني","الصومال","صومالي","جيبوتي","جزر القمر","قمري"];
 function isArabicNationality(nationality=""){const normalized=normalizeArabic(nationality).toLowerCase();return arabicNationalityTerms.some(term=>normalized.includes(normalizeArabic(term).toLowerCase()));}
 function whatsappNumber(employee){const phone=employee?.primaryPhone?.phone||employee?.phone||employee?.phoneNumber||"",dialCode=employee?.primaryPhone?.dialCode||"+965";const number=latinDigits(`${dialCode}${phone}`).replace(/\\D/g,"");return number||"";}
@@ -201,6 +220,7 @@ function scheduleWhatsappMessages(){
   return messages;
 }
 async function notifyScheduleByWhatsapp(){
+  if(ctx.CONFIG?.n8n?.employeeMessagesEnabled!==true)return{sent:0,skipped:0,disabled:true};
   const url=ctx.CONFIG?.n8n?.scheduleWhatsappUrl?.trim(),notifications=scheduleWhatsappMessages();
   if(!notifications.length)return{sent:0,skipped:0};
   if(!url)throw new Error("رابط إشعارات واتساب غير مضاف في config.js.");
@@ -212,7 +232,7 @@ async function notifyScheduleByWhatsapp(){
 async function publishSchedule(){
   if(!scheduleTranslationsReady()){ctx.showToast("أكمل الاسم الإنجليزي لكل موظف في الجدول وترجم المهام والملاحظات أولاً.");return;}
   const root=openPublishLoading();
-  try{setPublishProgress(20,{title:"جاري حفظ جدول الدوامات...",message:"نحفظ التوزيع والترجمات التي راجعتها.",remaining:"الوقت المتوقع: بضع ثوانٍ",step:1});schedule.published=true;schedule.publishedAt=Date.now();schedule.translationError=null;await persistSchedule();setPublishProgress(52,{title:"تم التحقق من الترجمات",message:"كل مهمة وملاحظة تحتوي ترجمتها الإنجليزية المحفوظة.",remaining:"جاري تجهيز الصفحات",step:2});schedule.translation=savedItemTranslation();setPublishProgress(78,{title:"جاري تجهيز صفحات الجدول...",message:"نجهز النسختين العربية والإنجليزية للتحميل.",remaining:"متبقي ثوانٍ قليلة",step:3});await persistSchedule();setPublishProgress(90,{title:"جاري إرسال إشعارات واتساب...",message:"نرسل لكل موظف رسالته المناسبة حسب جنسيته ودوامه.",remaining:"قد يستغرق هذا بضع ثوانٍ",step:4});let whatsappError="";try{const result=await notifyScheduleByWhatsapp();schedule.whatsappNotification={status:"sent",sent:result.sent,skipped:result.skipped,at:Date.now()};}catch(error){whatsappError=error.message||"تعذر إرسال إشعارات واتساب.";schedule.whatsappNotification={status:"failed",message:whatsappError,at:Date.now()};}await persistSchedule();setPublishProgress(100,{title:"تم نشر جدول الدوامات",message:whatsappError?"الملف جاهز، لكن إشعارات واتساب تحتاج مراجعة.":"الملف جاهز وتم إرسال إشعارات واتساب.",remaining:"اكتملت العملية",step:4});await new Promise(resolve=>setTimeout(resolve,250));ctx.showToast(whatsappError?`تم نشر الجدول، لكن تعذر إرسال واتساب: ${whatsappError}`:"تم نشر الجدول والتحميل جاهز وتم إرسال إشعارات واتساب");}finally{root.innerHTML="";renderDayWorkspace();}
+  try{setPublishProgress(20,{title:"جاري حفظ جدول الدوامات...",message:"نحفظ التوزيع والترجمات التي راجعتها.",remaining:"الوقت المتوقع: بضع ثوانٍ",step:1});schedule.published=true;schedule.publishedAt=Date.now();schedule.translationError=null;await persistSchedule();setPublishProgress(52,{title:"تم التحقق من الترجمات",message:"كل مهمة وملاحظة تحتوي ترجمتها الإنجليزية المحفوظة.",remaining:"جاري تجهيز الصفحات",step:2});schedule.translation=savedItemTranslation();setPublishProgress(78,{title:"جاري تجهيز صفحات الجدول...",message:"نجهز النسختين العربية والإنجليزية وإشعارات الموظفين.",remaining:"متبقي ثوانٍ قليلة",step:3});await persistSchedule();await publishEmployeeAppNotifications();schedule.whatsappNotification={status:"disabled",sent:0,at:Date.now()};setPublishProgress(100,{title:"تم نشر جدول الدوامات",message:"وصل إشعار شخصي في تطبيق البصمة لكل موظف لديه دوام أو ملاحظة.",remaining:"اكتملت العملية",step:4});await persistSchedule();await new Promise(resolve=>setTimeout(resolve,250));ctx.showToast("تم نشر الجدول وإشعارات الموظفين في تطبيق البصمة");}finally{root.innerHTML="";renderDayWorkspace();}
 }
 
 const fallbackBranchNames={hawalli:"Hawalli Branch Schedule",abu_al_hasaniya:"Abu Al Hasaniya Branch Schedule",yarmouk:"Yarmouk Branch Schedule"};
