@@ -13,6 +13,8 @@ let activeDay=null;
 let schedule=null;
 let selectedNoteEmployee=null;
 let draggingAssignmentId="";
+let weekOffset=0;
+let hideFinishedEmployees=false;
 
 const $=selector=>document.querySelector(selector);
 const esc=(value="")=>String(value).replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
@@ -30,7 +32,7 @@ const formatTime=value=>{const p=timeLabel(value);return`${arabicDigits(p.clock)
 const formatEnglishTime=value=>{const p=timeLabel(value);return`${p.clock} ${p.period.toUpperCase()}`;};
 const assignmentTimeRange=(from,to)=>{const start=timeLabel(from),end=timeLabel(to);return`<span class="assignment-time" dir="rtl"><bdi>${arabicDigits(start.clock)}</bdi><em>${start.period==="am"?"ص":"م"}</em><i>—</i><bdi>${arabicDigits(end.clock)}</bdi><em>${end.period==="am"?"ص":"م"}</em></span>`;};
 
-function weekDays(){const now=new Date(),start=new Date(now);start.setHours(12,0,0,0);const sinceSaturday=(now.getDay()-6+7)%7;start.setDate(now.getDate()-sinceSaturday);return DAYS.map((day,index)=>{const date=new Date(start);date.setDate(start.getDate()+index);return{...day,date,key:dateKey(date)};});}
+function weekDays(offset=weekOffset){const now=new Date(),start=new Date(now);start.setHours(12,0,0,0);const sinceSaturday=(now.getDay()-6+7)%7;start.setDate(now.getDate()-sinceSaturday+(offset*7));return DAYS.map((day,index)=>{const date=new Date(start);date.setDate(start.getDate()+index);return{...day,date,key:dateKey(date)};});}
 function emptySchedule(day){return{dateKey:day.key,dayName:day.name,date:day.date.toISOString(),assignments:{},notes:{},published:false,translation:null,updatedAt:Date.now()};}
 function assignments(){return Object.values(schedule?.assignments||{}).sort((a,b)=>Number(a.order??a.createdAt??0)-Number(b.order??b.createdAt??0));}
 function notes(){return Object.values(schedule?.notes||{});}
@@ -44,15 +46,35 @@ function leaveForDay(employeeId,key=activeDay?.key){if(!key)return null;const da
 function availableWorkHours(employee){const leave=leaveForDay(employee.id),base=Math.max(0,Number(employee.dailyHours||0));if(leave?.duration==="full")return 0;if(leave?.duration==="half")return base/2;return base;}
 function remainingHours(employee){return Math.max(0,availableWorkHours(employee)-usedHours(employee.id));}
 function incompleteScheduleEmployees(){return ctx.state.employees.filter(employee=>remainingHours(employee)>0.001);}
-function leaveNotesForDay(){return ctx.state.employees.map(employee=>({employee,leave:leaveForDay(employee.id)})).filter(item=>item.leave&&(item.leave.type==="weekly"||item.leave.type==="sick"));}
+function leaveNotesForDay(){return ctx.state.employees.map(employee=>({employee,leave:leaveForDay(employee.id)})).filter(item=>item.leave);}
 function documentLogos(){const companyLogo=ctx?.state?.settings?.companyLogoUrl||ctx?.state?.settings?.companyLogoDataUrl;return`<div class="document-logos"><div class="document-company-logo">${companyLogo?`<img src="${esc(companyLogo)}" crossorigin="anonymous" alt="شعار المنشأة">`:'<span>شعار المنشأة</span>'}</div><div class="document-rakaez-logo"><img src="rakaez-mark.png" crossorigin="anonymous" alt="شعار ركائز"></div></div>`;}
 
-export async function renderScheduleWorkspace(options){ctx=options;ctx.state.demoSchedules=ctx.state.demoSchedules||{};activeDay=null;schedule=null;renderDayFiles();}
+export async function renderScheduleWorkspace(options){ctx=options;ctx.state.demoSchedules=ctx.state.demoSchedules||{};activeDay=null;schedule=null;weekOffset=0;hideFinishedEmployees=false;renderDayFiles();}
 
 function renderDayFiles(){
   const days=weekDays();
-  ctx.container.innerHTML=`<section class="schedule-landing"><div class="schedule-landing-head"><div><span>التخطيط الأسبوعي</span><h1>جدول الدوامات</h1></div><div class="week-badge">الأسبوع الحالي<br><b>${displayDate(days[0].date)} — ${displayDate(days[6].date)}</b></div></div><div class="day-files">${days.map((day,index)=>`<button class="day-file" data-day="${index}"><i>${String(index+1).padStart(2,"0")}</i><span><b>${day.name}</b><small>${displayDate(day.date)}</small></span><em>فتح الملف ←</em></button>`).join("")}</div></section>`;
+  const today=dateKey(new Date()),canRequestNext=weekOffset===0&&today===days[6].key;
+  ctx.container.innerHTML=`<section class="schedule-landing"><div class="schedule-landing-head"><div><span>التخطيط الأسبوعي</span><h1>جدول الدوامات</h1></div><button type="button" class="week-badge ${canRequestNext||weekOffset===1?"actionable":""}" id="week-badge">${weekOffset===1?"الأسبوع التالي":"الأسبوع الحالي"}<br><b>${displayDate(days[0].date)} — ${displayDate(days[6].date)}</b>${weekOffset===1?'<small>العودة للأسبوع الحالي</small>':canRequestNext?'<small>الانتقال للأسبوع التالي</small>':""}</button></div><div class="day-files">${days.map((day,index)=>`<button class="day-file" data-day="${index}"><i>${String(index+1).padStart(2,"0")}</i><span><b>${day.name}</b><small>${displayDate(day.date)}</small></span><em>فتح الملف ←</em></button>`).join("")}</div></section>`;
   document.querySelectorAll(".day-file").forEach(button=>button.onclick=()=>openDay(days[Number(button.dataset.day)]));
+  $("#week-badge").onclick=()=>weekOffset===1?showCurrentWeek():requestNextWeek(days);
+}
+
+function showCurrentWeek(){weekOffset=0;activeDay=null;schedule=null;renderDayFiles();}
+async function requestNextWeek(days){
+  if(dateKey(new Date())!==days[6].key)return;
+  const friday=days[6];let fridaySchedule;
+  try{fridaySchedule=ctx.state.demo?ctx.state.demoSchedules[friday.key]:(await ctx.get(ctx.ref(ctx.db,`organizations/default/schedules/${friday.key}`))).val();}
+  catch(error){ctx.showToast("تعذر التحقق من نشر جدول الجمعة، حاول مرة أخرى.");return;}
+  if(!fridaySchedule?.published){ctx.showToast("يجب نشر جدول الجمعة أولاً قبل الانتقال للأسبوع التالي.");return;}
+  openNextWeekConfirmation();
+}
+function openNextWeekConfirmation(){
+  const root=document.querySelector("#modal-root");
+  root.innerHTML=`<div class="modal-backdrop next-week-backdrop"><section class="modal next-week-modal" role="dialog" aria-modal="true" aria-labelledby="next-week-title"><header><div><span>جدول الدوامات</span><h3 id="next-week-title">الانتقال للأسبوع التالي</h3></div><button type="button" class="modal-close" aria-label="إغلاق">×</button></header><div class="next-week-content"><div aria-hidden="true">→</div><p>هل تريد الانتقال للأسبوع التالي؟</p></div><footer><button type="button" id="cancel-next-week" class="secondary">لا</button><button type="button" id="confirm-next-week" class="primary">نعم</button></footer></section></div>`;
+  const close=()=>root.innerHTML="";
+  root.querySelector(".modal-close").onclick=root.querySelector("#cancel-next-week").onclick=close;
+  root.querySelector(".next-week-backdrop").onclick=event=>{if(event.target.classList.contains("next-week-backdrop"))close();};
+  root.querySelector("#confirm-next-week").onclick=()=>{close();weekOffset=1;activeDay=null;schedule=null;renderDayFiles();};
 }
 
 async function openDay(day){
@@ -74,6 +96,13 @@ async function openDay(day){
 function renderDayWorkspace(){
   const variableEmployees=ctx.state.employees,fixedEmployeesOnLeave=ctx.state.employees.filter(employee=>employee.scheduleType!=="variable"&&leaveForDay(employee.id)),leaveNotes=leaveNotesForDay(),dayNotes=notes();
   ctx.container.innerHTML=`<div class="schedule-workspace"><div class="schedule-toolbar"><button id="back-to-days" class="secondary">→ أيام الأسبوع</button><div><span>${activeDay.name}</span><h2>جدول دوام الأفرع ${activeDay.name} ${displayDate(activeDay.date)}</h2><small id="autosave-status"></small></div><div class="schedule-actions"><button id="publish-schedule" class="primary">نشر الجدول</button>${schedule.published&&schedule.translation?'<button id="download-schedule" class="secondary">تحميل PDF عربي + إنجليزي</button>':""}</div></div><div class="planner-layout"><aside class="employee-pool"><div class="pool-head"><div><h3>موظفو الجدول</h3></div><span>${variableEmployees.length}</span></div><div class="pool-list">${variableEmployees.length?variableEmployees.map(employeePoolCard).join(""):'<div class="pool-empty"></div>'}</div>${fixedEmployeesOnLeave.length?`<section class="daily-leaves-panel"><header><b>إجازات اليوم</b><span>${fixedEmployeesOnLeave.length}</span></header>${fixedEmployeesOnLeave.map(dailyLeaveCard).join("")}</section>`:""}</aside><section class="a4-sheet"><header>${documentLogos()}<h1>جدول دوام الأفرع ${activeDay.name} ${displayDate(activeDay.date)}</h1></header>${BRANCHES.map(branch=>branchSection(branch)).join("")}<section class="sheet-notes"><div class="sheet-section-title"><h3>الملاحظات</h3><button id="add-schedule-note" class="note-add">＋ إضافة ملاحظة</button></div><div class="notes-list">${leaveNotes.length||dayNotes.length?`${leaveNotes.map(leaveNoteCard).join("")}${dayNotes.map(noteCard).join("")}`:""}</div></section></section></div>${schedule.published?'<div class="published-banner">✓ تم نشر هذا الجدول لموظفي البصمة</div>':""}${schedule.translationError&&!schedule.translation?`<div class="translation-warning">تم نشر الجدول، لكن تعذرت الترجمة: ${esc(schedule.translationError)}</div>`:""}</div><div id="pdf-render-root"></div>`;
+  const poolHead=ctx.container.querySelector(".pool-head"),poolList=ctx.container.querySelector(".pool-list");
+  poolHead.insertAdjacentHTML("afterend",`<label class="hide-finished-toggle"><input id="hide-finished-employees" type="checkbox" ${hideFinishedEmployees?"checked":""}><span>إخفاء المنتهين</span></label>`);
+  if(hideFinishedEmployees){
+    poolList.querySelectorAll(".pool-card.complete,.pool-card.leave-full").forEach(card=>card.remove());
+    poolHead.querySelector(":scope > span").textContent=String(poolList.querySelectorAll(".pool-card").length);
+    if(!poolList.querySelector(".pool-card"))poolList.innerHTML='<div class="pool-empty">لا يوجد موظفون متاحون للسحب</div>';
+  }
   bindWorkspaceEvents();
 }
 
@@ -86,6 +115,7 @@ function noteCard(note){const employee=note.employeeId?employeeById(note.employe
 
 function bindWorkspaceEvents(){
   $("#back-to-days").onclick=renderDayFiles;
+  $("#hide-finished-employees").onchange=event=>{hideFinishedEmployees=event.target.checked;renderDayWorkspace();};
   document.querySelectorAll(".pool-card:not(.complete):not(.leave-full)").forEach(card=>card.ondragstart=event=>event.dataTransfer.setData("text/plain",`employee:${card.dataset.employee}`));
   const clearDropMarkers=()=>document.querySelectorAll(".assignment-card.drop-before,.assignment-card.drop-after").forEach(item=>item.classList.remove("drop-before","drop-after"));
   document.querySelectorAll(".assignment-card").forEach(card=>{card.ondragstart=event=>{draggingAssignmentId=card.dataset.assignment;event.dataTransfer.setData("text/plain",`assignment:${card.dataset.assignment}`);event.dataTransfer.effectAllowed="move";};card.ondragend=()=>{draggingAssignmentId="";clearDropMarkers();};card.ondragover=event=>{event.preventDefault();event.stopPropagation();if(!draggingAssignmentId)return;clearDropMarkers();card.classList.add(event.clientX>card.getBoundingClientRect().left+card.getBoundingClientRect().width/2?"drop-before":"drop-after");};card.ondragleave=event=>{if(!card.contains(event.relatedTarget))card.classList.remove("drop-before","drop-after");};card.ondrop=event=>{event.preventDefault();event.stopPropagation();const [kind,id]=event.dataTransfer.getData("text/plain").split(":"),beforeId=card.classList.contains("drop-before")?card.dataset.assignment:card.nextElementSibling?.dataset.assignment||"";clearDropMarkers();if(kind==="assignment"){const target=schedule.assignments[card.dataset.assignment];if(target)moveAssignment(id,target.branchId,beforeId);}};card.ondblclick=event=>{if(event.target.closest("button"))return;const item=schedule.assignments[card.dataset.assignment];if(item)openAssignmentModal(item.employeeId,item.branchId,item.id);};});
@@ -326,10 +356,127 @@ async function translateWithLocalAI(){
   }
 }
 
-function pdfPage(language){
-  const english=language==="en",translation=schedule.translation||{},time=english?formatEnglishTime:formatTime,employeeName=id=>translation.employeeNames?.[id]||firstName(employeeById(id)?.fullName),leaveNotes=leaveNotesForDay();
-  const leaveMarkup=leaveNotes.map(({employee,leave})=>`<article class="pdf-note leave-note"><b>${english?esc(employeeName(employee.id)):esc(firstName(employee.fullName))}:</b><p>${english?englishLeaveTypeLabel(leave):leaveTypeLabel(leave)}</p></article>`).join("");
-  const noteMarkup=notes().map(note=>`<article class="pdf-note"><b>${note.general?(english?"General":"عام"):(english?esc(employeeName(note.employeeId)):esc(firstName(employeeById(note.employeeId)?.fullName)))}:</b><p>${english?esc(translation.notes?.[note.id]||note.text):esc(note.text)}</p></article>`).join("");
-  return`<section class="pdf-page ${english?"english":"arabic"}" dir="${english?"ltr":"rtl"}"><div class="pdf-sheet"><header>${documentLogos()}<h1>${english?esc(translation.title||`Branch Schedule — ${schedule.dayName} ${displayDate(activeDay.date)}`):`جدول دوام الأفرع ${schedule.dayName} ${displayDate(activeDay.date)}`}</h1></header>${BRANCHES.map(branch=>`<div class="pdf-branch" style="--branch:${branch.color}"><h2>${english?esc(translation.branchNames?.[branch.id]||branch.name):branch.name}</h2><div>${assignments().filter(item=>item.branchId===branch.id).map(item=>{const breakMinutes=Math.max(0,Number(item.breakMinutes||0));return`<article><b>${english?esc(employeeName(item.employeeId)):esc(firstName(employeeById(item.employeeId)?.fullName))}</b><span>${time(item.from)} — ${time(item.to)}</span>${breakMinutes?`<small class="pdf-break">${english?`Break: ${formatHours(breakMinutes)} min`:`بريك: ${formatHours(breakMinutes)} دقيقة`}</small>`:""}<p>${english?(translation.tasks?.[item.id]||item.tasks).map(esc).join(" + "):item.tasks.map(esc).join(" + ")}</p></article>`;}).join("")||`<p class="pdf-empty">${english?"No assignments":"لا يوجد دوام"}</p>`}</div></div>`).join("")}<footer class="pdf-notes"><h3>${english?"Notes":"الملاحظات"}</h3><div>${leaveMarkup||noteMarkup?`${leaveMarkup}${noteMarkup}`:`<p class="pdf-empty">${english?"No notes":"لا توجد ملاحظات"}</p>`}</div></footer></div></section>`;
+function pdfGridColumns(count){
+  if(count<=1)return"cols-1";
+  if(count===2)return"cols-2";
+  if(count<=3)return"cols-3";
+  if(count<=4)return"cols-4";
+  if(count<=6)return"cols-3";
+  return"cols-4";
 }
-async function downloadPdf(){if(!schedule.translation){ctx.showToast("لا يمكن تحميل PDF حتى تكتمل الترجمة.");return;}const root=$("#pdf-render-root");root.innerHTML=pdfPage("ar")+pdfPage("en");const pages=[...root.querySelectorAll(".pdf-page")],{jsPDF}=window.jspdf,pdf=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});for(let index=0;index<pages.length;index++){const canvas=await window.html2canvas(pages[index],{scale:2,backgroundColor:"#ffffff",useCORS:true});if(index)pdf.addPage("a4","landscape");pdf.addImage(canvas.toDataURL("image/png"),"PNG",0,0,297,210);}pdf.save(`جدول دوام الأفرع يوم ${schedule.dayName} تاريخ ${displayDate(activeDay.date)}.pdf`);root.innerHTML="";}
+
+function buildPdfPages(language){
+  const english=language==="en",translation=schedule.translation||{},time=english?formatEnglishTime:formatTime;
+  const employeeName=id=>translation.employeeNames?.[id]||firstName(employeeById(id)?.fullName);
+  const title=english?esc(translation.title||`Branch Schedule — ${schedule.dayName} ${displayDate(activeDay.date)}`):`جدول دوام الأفرع ${schedule.dayName} ${displayDate(activeDay.date)}`;
+  const root=$("#pdf-render-root"),pages=[];
+  let page,content;
+  const createPage=()=>{
+    page=document.createElement("section");
+    page.className=`pdf-page ${english?"english":"arabic"}`;
+    page.dir=english?"ltr":"rtl";
+    page.innerHTML=`<div class="pdf-sheet"><header>${documentLogos()}<h1>${title}</h1></header><main class="pdf-content"></main><footer class="pdf-page-number"></footer></div>`;
+    root.append(page);
+    content=page.querySelector(".pdf-content");
+    pages.push(page);
+  };
+  const overflows=()=>page.querySelector(".pdf-sheet").scrollHeight>page.querySelector(".pdf-sheet").clientHeight+1;
+  const branchTitle=(branch,continued=false)=>`${english?esc(translation.branchNames?.[branch.id]||branch.name):branch.name}${continued?` <small>${english?"(continued)":"(تابع)"}</small>`:""}`;
+  const createBranch=(branch,continued=false)=>{
+    const section=document.createElement("section");
+    section.className="pdf-branch";
+    section.style.setProperty("--branch",branch.color);
+    section.innerHTML=`<h2>${branchTitle(branch,continued)}</h2><div class="pdf-card-grid"></div>`;
+    content.append(section);
+    return section;
+  };
+  const assignmentMarkup=item=>{
+    const breakMinutes=Math.max(0,Number(item.breakMinutes||0));
+    const translatedTasks=translation.tasks?.[item.id];
+    const tasks=english?(Array.isArray(translatedTasks)?translatedTasks:(translatedTasks?[translatedTasks]:item.tasks||[])):(item.tasks||[]);
+    return`<b>${english?esc(employeeName(item.employeeId)):esc(firstName(employeeById(item.employeeId)?.fullName))}</b><span>${time(item.from)} — ${time(item.to)}</span>${breakMinutes?`<small class="pdf-break">${english?`Break: ${formatHours(breakMinutes)} min`:`بريك: ${formatHours(breakMinutes)} دقيقة`}</small>`:""}<p>${tasks.map(esc).join(" + ")}</p>`;
+  };
+  const normalizeGrid=grid=>{grid.className=`pdf-card-grid ${pdfGridColumns(grid.children.length)}`;};
+  const appendPaginatedCard=(makeSection,markup,className="")=>{
+    let section=makeSection(false,false),grid=section.lastElementChild;
+    const card=document.createElement("article");
+    card.className=className;
+    card.innerHTML=markup;
+    grid.append(card);
+    normalizeGrid(grid);
+    if(!overflows())return;
+    card.remove();
+    normalizeGrid(grid);
+    if(!grid.children.length)section.remove();
+    createPage();
+    section=makeSection(true,true);
+    grid=section.lastElementChild;
+    grid.append(card);
+    normalizeGrid(grid);
+  };
+
+  createPage();
+  BRANCHES.forEach(branch=>{
+    const items=assignments().filter(item=>item.branchId===branch.id);
+    if(!items.length)return;
+    let currentSection=null,branchPlaced=0;
+    const makeSection=(continued,forceNew)=>{
+      if(!forceNew&&currentSection&&currentSection.isConnected)return currentSection;
+      currentSection=createBranch(branch,continued&&branchPlaced>0);
+      return currentSection;
+    };
+    items.forEach(item=>{
+      appendPaginatedCard(makeSection,assignmentMarkup(item));
+      branchPlaced++;
+      currentSection=content.lastElementChild?.classList.contains("pdf-branch")?content.lastElementChild:null;
+    });
+  });
+
+  const leaveNotes=leaveNotesForDay().map(({employee,leave})=>({
+    className:"leave-note",
+    label:english?employeeName(employee.id):firstName(employee.fullName),
+    text:english?englishLeaveTypeLabel(leave):leaveTypeLabel(leave)
+  }));
+  const scheduleNotes=notes().map(note=>({
+    className:"",
+    label:note.general?(english?"General":"عام"):(english?employeeName(note.employeeId):firstName(employeeById(note.employeeId)?.fullName)),
+    text:english?(translation.notes?.[note.id]||note.text):note.text
+  }));
+  const allNotes=[...leaveNotes,...scheduleNotes];
+  if(allNotes.length){
+    let notesSection=null,notesPlaced=0;
+    const makeNotesSection=(continued,forceNew)=>{
+      if(!forceNew&&notesSection&&notesSection.isConnected)return notesSection;
+      notesSection=document.createElement("section");
+      notesSection.className="pdf-notes";
+      notesSection.innerHTML=`<h3>${english?"Notes":"الملاحظات"}${continued&&notesPlaced>0?` <small>${english?"(continued)":"(تابع)"}</small>`:""}</h3><div class="pdf-card-grid"></div>`;
+      content.append(notesSection);
+      return notesSection;
+    };
+    allNotes.forEach(note=>{
+      appendPaginatedCard(makeNotesSection,`<b>${esc(note.label)}:</b><p>${esc(note.text)}</p>`,note.className);
+      notesPlaced++;
+      notesSection=content.lastElementChild?.classList.contains("pdf-notes")?content.lastElementChild:null;
+    });
+  }
+
+  pages.forEach((item,index)=>{item.querySelector(".pdf-page-number").textContent=english?`Page ${index+1} of ${pages.length}`:`صفحة ${index+1} من ${pages.length}`;});
+  return pages;
+}
+
+async function downloadPdf(){
+  if(!schedule.translation){ctx.showToast("لا يمكن تحميل PDF حتى تكتمل الترجمة.");return;}
+  const root=$("#pdf-render-root");
+  root.innerHTML="";
+  try{
+    const pages=[...buildPdfPages("ar"),...buildPdfPages("en")],{jsPDF}=window.jspdf,pdf=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
+    for(let index=0;index<pages.length;index++){
+      const canvas=await window.html2canvas(pages[index],{scale:2,backgroundColor:"#ffffff",useCORS:true});
+      if(index)pdf.addPage("a4","landscape");
+      pdf.addImage(canvas.toDataURL("image/png"),"PNG",0,0,297,210);
+    }
+    pdf.save(`جدول دوام الأفرع يوم ${schedule.dayName} تاريخ ${displayDate(activeDay.date)}.pdf`);
+  }finally{
+    root.innerHTML="";
+  }
+}
