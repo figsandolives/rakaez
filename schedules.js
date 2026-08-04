@@ -83,7 +83,9 @@ async function openDay(day){
     if(ctx.state.demo){schedule=ctx.state.demoSchedules[day.key]||emptySchedule(day);}
     else{const snap=await ctx.get(ctx.ref(ctx.db,`organizations/default/schedules/${day.key}`));schedule=snap.exists()?snap.val():emptySchedule(day);}
     if(schedule.translation){
-      schedule.translation.employeeNames=Object.fromEntries(ctx.state.employees.map(employee=>[employee.id,String(employee.fullNameEn||"").trim()]));
+      const savedNames=schedule.translation.employeeNames||{};
+      const currentNames=Object.fromEntries(ctx.state.employees.filter(employee=>String(employee.fullNameEn||"").trim()).map(employee=>[employee.id,String(employee.fullNameEn).trim()]));
+      schedule.translation.employeeNames={...savedNames,...currentNames};
     }
     renderDayWorkspace();
   }catch(error){
@@ -95,7 +97,7 @@ async function openDay(day){
 
 function renderDayWorkspace(){
   const variableEmployees=ctx.state.employees,fixedEmployeesOnLeave=ctx.state.employees.filter(employee=>employee.scheduleType!=="variable"&&leaveForDay(employee.id)),leaveNotes=leaveNotesForDay(),dayNotes=notes();
-  ctx.container.innerHTML=`<div class="schedule-workspace"><div class="schedule-toolbar"><button id="back-to-days" class="secondary">→ أيام الأسبوع</button><div><span>${activeDay.name}</span><h2>جدول دوام الأفرع ${activeDay.name} ${displayDate(activeDay.date)}</h2><small id="autosave-status"></small></div><div class="schedule-actions"><button id="publish-schedule" class="primary">نشر الجدول</button>${schedule.published&&schedule.translation?'<button id="download-schedule" class="secondary">تحميل PDF عربي + إنجليزي</button>':""}</div></div><div class="planner-layout"><aside class="employee-pool"><div class="pool-head"><div><h3>موظفو الجدول</h3></div><span>${variableEmployees.length}</span></div><div class="pool-list">${variableEmployees.length?variableEmployees.map(employeePoolCard).join(""):'<div class="pool-empty"></div>'}</div>${fixedEmployeesOnLeave.length?`<section class="daily-leaves-panel"><header><b>إجازات اليوم</b><span>${fixedEmployeesOnLeave.length}</span></header>${fixedEmployeesOnLeave.map(dailyLeaveCard).join("")}</section>`:""}</aside><section class="a4-sheet"><header>${documentLogos()}<h1>جدول دوام الأفرع ${activeDay.name} ${displayDate(activeDay.date)}</h1></header>${BRANCHES.map(branch=>branchSection(branch)).join("")}<section class="sheet-notes"><div class="sheet-section-title"><h3>الملاحظات</h3><button id="add-schedule-note" class="note-add">＋ إضافة ملاحظة</button></div><div class="notes-list">${leaveNotes.length||dayNotes.length?`${leaveNotes.map(leaveNoteCard).join("")}${dayNotes.map(noteCard).join("")}`:""}</div></section></section></div>${schedule.published?'<div class="published-banner">✓ تم نشر هذا الجدول لموظفي البصمة</div>':""}${schedule.translationError&&!schedule.translation?`<div class="translation-warning">تم نشر الجدول، لكن تعذرت الترجمة: ${esc(schedule.translationError)}</div>`:""}</div><div id="pdf-render-root"></div>`;
+  ctx.container.innerHTML=`<div class="schedule-workspace"><div class="schedule-toolbar"><button id="back-to-days" class="secondary">→ أيام الأسبوع</button><div><span>${activeDay.name}</span><h2>جدول دوام الأفرع ${activeDay.name} ${displayDate(activeDay.date)}</h2><small id="autosave-status"></small></div><div class="schedule-actions"><button id="copy-last-week-schedule" class="secondary">نسخ دوامات الأسبوع الماضي</button><button id="publish-schedule" class="primary">نشر الجدول</button>${schedule.published&&schedule.translation?'<button id="download-schedule" class="secondary">تحميل PDF عربي + إنجليزي</button>':""}</div></div><div class="planner-layout"><aside class="employee-pool"><div class="pool-head"><div><h3>موظفو الجدول</h3></div><span>${variableEmployees.length}</span></div><div class="pool-list">${variableEmployees.length?variableEmployees.map(employeePoolCard).join(""):'<div class="pool-empty"></div>'}</div>${fixedEmployeesOnLeave.length?`<section class="daily-leaves-panel"><header><b>إجازات اليوم</b><span>${fixedEmployeesOnLeave.length}</span></header>${fixedEmployeesOnLeave.map(dailyLeaveCard).join("")}</section>`:""}</aside><section class="a4-sheet"><header>${documentLogos()}<h1>جدول دوام الأفرع ${activeDay.name} ${displayDate(activeDay.date)}</h1></header>${BRANCHES.map(branch=>branchSection(branch)).join("")}<section class="sheet-notes"><div class="sheet-section-title"><h3>الملاحظات</h3><button id="add-schedule-note" class="note-add">＋ إضافة ملاحظة</button></div><div class="notes-list">${leaveNotes.length||dayNotes.length?`${leaveNotes.map(leaveNoteCard).join("")}${dayNotes.map(noteCard).join("")}`:""}</div></section></section></div>${schedule.published?'<div class="published-banner">✓ تم نشر هذا الجدول لموظفي البصمة</div>':""}${schedule.translationError&&!schedule.translation?`<div class="translation-warning">تم نشر الجدول، لكن تعذرت الترجمة: ${esc(schedule.translationError)}</div>`:""}</div><div id="pdf-render-root"></div>`;
   const poolHead=ctx.container.querySelector(".pool-head"),poolList=ctx.container.querySelector(".pool-list");
   poolHead.insertAdjacentHTML("afterend",`<label class="hide-finished-toggle"><input id="hide-finished-employees" type="checkbox" ${hideFinishedEmployees?"checked":""}><span>إخفاء المنتهين</span></label>`);
   if(hideFinishedEmployees){
@@ -115,6 +117,7 @@ function noteCard(note){const employee=note.employeeId?employeeById(note.employe
 
 function bindWorkspaceEvents(){
   $("#back-to-days").onclick=renderDayFiles;
+  $("#copy-last-week-schedule").onclick=copyLastWeekSchedule;
   $("#hide-finished-employees").onchange=event=>{hideFinishedEmployees=event.target.checked;renderDayWorkspace();};
   document.querySelectorAll(".pool-card:not(.complete):not(.leave-full)").forEach(card=>card.ondragstart=event=>event.dataTransfer.setData("text/plain",`employee:${card.dataset.employee}`));
   const clearDropMarkers=()=>document.querySelectorAll(".assignment-card.drop-before,.assignment-card.drop-after").forEach(item=>item.classList.remove("drop-before","drop-after"));
@@ -127,6 +130,43 @@ function bindWorkspaceEvents(){
   $("#add-schedule-note").onclick=openNoteModal;
   $("#publish-schedule").onclick=publishSchedule;
   $("#download-schedule")?.addEventListener("click",downloadPdf);
+}
+
+function previousWeekDay(){
+  const date=new Date(activeDay.date);
+  date.setDate(date.getDate()-7);
+  return{...activeDay,date,key:dateKey(date)};
+}
+
+async function copyLastWeekSchedule(){
+  const sourceDay=previousWeekDay();
+  let source;
+  try{
+    if(ctx.state.demo)source=ctx.state.demoSchedules[sourceDay.key];
+    else{const snapshot=await ctx.get(ctx.ref(ctx.db,`organizations/default/schedules/${sourceDay.key}`));source=snapshot.exists()?snapshot.val():null;}
+  }catch(error){ctx.showToast("تعذر تحميل جدول الأسبوع الماضي، حاول مرة أخرى.");return;}
+  const sourceAssignments=Object.values(source?.assignments||{});
+  if(!sourceAssignments.length){ctx.showToast(`لا توجد دوامات في جدول ${activeDay.name} بتاريخ ${displayDate(sourceDay.date)}.`);return;}
+  openCopyLastWeekConfirmation(sourceDay,sourceAssignments);
+}
+
+function openCopyLastWeekConfirmation(sourceDay,sourceAssignments){
+  const root=$("#modal-root"),currentCount=assignments().length;
+  root.innerHTML=`<div class="modal-backdrop copy-week-backdrop"><section class="modal copy-week-modal" role="dialog" aria-modal="true" aria-labelledby="copy-week-title"><header><div><span>نسخ الدوامات</span><h3 id="copy-week-title">نسخ دوام ${activeDay.name} السابق</h3></div><button type="button" class="modal-close" aria-label="إغلاق">×</button></header><div class="copy-week-content"><div aria-hidden="true">⎘</div><p>سيتم نسخ ${sourceAssignments.length} فترة دوام من ${displayDate(sourceDay.date)} إلى هذا الجدول.</p>${currentCount?`<small>سيتم استبدال ${currentCount} فترة دوام موجودة حالياً. الملاحظات لن تتغير.</small>`:""}</div><footer><button type="button" class="secondary" id="cancel-copy-week">إلغاء</button><button type="button" class="primary" id="confirm-copy-week">نسخ الدوامات</button></footer></section></div>`;
+  const close=()=>root.innerHTML="";
+  root.querySelector(".modal-close").onclick=root.querySelector("#cancel-copy-week").onclick=close;
+  root.querySelector(".copy-week-backdrop").onclick=event=>{if(event.target.classList.contains("copy-week-backdrop"))close();};
+  root.querySelector("#confirm-copy-week").onclick=async()=>{
+    const now=Date.now();
+    schedule.assignments=Object.fromEntries(sourceAssignments.map((assignment,index)=>{
+      const id=crypto.randomUUID();
+      return[id,{...structuredClone(assignment),id,order:Number.isFinite(Number(assignment.order))?Number(assignment.order):index,createdAt:now,updatedAt:now}];
+    }));
+    close();
+    await persistSchedule({invalidate:true});
+    renderDayWorkspace();
+    ctx.showToast(`تم نسخ ${sourceAssignments.length} فترة دوام من الأسبوع الماضي.`);
+  };
 }
 
 async function moveAssignment(id,branchId,beforeId=""){const item=schedule.assignments[id];if(!item)return;item.branchId=branchId;const ordered=assignments().filter(assignment=>assignment.id!==id&&assignment.branchId===branchId),beforeIndex=beforeId?ordered.findIndex(assignment=>assignment.id===beforeId):-1;ordered.splice(beforeIndex>=0?beforeIndex:ordered.length,0,item);ordered.forEach((assignment,index)=>{schedule.assignments[assignment.id]={...schedule.assignments[assignment.id],branchId,order:index};});await persistSchedule({invalidate:true});renderDayWorkspace();}
@@ -182,17 +222,22 @@ function setItemTranslationProgress({title="",remaining="",percent=0,visible=tru
 function extractItemTranslations(payload,items){let response=payload;if(typeof response?.message?.content==="string"){try{response=JSON.parse(response.message.content);}catch{throw new Error("رد Ollama لا يحتوي JSON صالحاً للترجمة.");}}const raw=Array.isArray(response)?response:(response?.translations||response?.data?.translations||response?.output?.translations||response?.result?.translations||response?.data||response?.output||response?.result);const records=Array.isArray(raw)?raw:null;if(!records)throw new Error("رد n8n لا يحتوي على قائمة ترجمات صالحة.");const byId=new Map(records.map((item,index)=>[String(item?.id??index),String(item?.translation??item?.translation_text??item?.text??item?.translatedText??item?.english??"").trim()]));const result=items.map((item,index)=>byId.get(String(item.id))||byId.get(String(index))||"");if(result.some(text=>!text))throw new Error("رد n8n لم يترجم كل النصوص المطلوبة.");return result;}
 async function translateItems(items,label){
   const url=ctx.CONFIG?.n8n?.scheduleTranslationUrl?.trim();
-  if(!url)throw new Error("رابط ترجمة n8n غير مضاف بعد. أضفه في ملف config.js أولاً.");
   const estimated=itemTranslationEstimate(items),startedAt=Date.now();
   setItemTranslationProgress({title:`جاري ترجمة ${label} بالذكاء الاصطناعي...`,remaining:`الوقت المتوقع: ${estimated} ثوانٍ`,percent:12});
   const timer=setInterval(()=>{const elapsed=(Date.now()-startedAt)/1000,percent=Math.min(90,12+Math.round((elapsed/estimated)*78)),remaining=Math.max(1,Math.ceil(estimated-elapsed));setItemTranslationProgress({title:`جاري ترجمة ${label} بالذكاء الاصطناعي...`,remaining:`متبقي تقريباً ${remaining} ثوانٍ`,percent});},500);
   try{
+    if(!url)throw new Error("رابط n8n غير مضاف");
     const response=await fetch(url,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"translate_schedule_items",sourceLanguage:"ar",targetLanguage:"en",context:"Professional HR branch schedule. Return clear English only.",items})});
     let payload;try{payload=await response.json();}catch{throw new Error("رد n8n ليس بصيغة JSON صالحة.");}
     if(!response.ok||payload?.ok===false)throw new Error(payload?.message||"تعذر اتصال n8n بخدمة الترجمة.");
     const translations=extractItemTranslations(payload,items);
     setItemTranslationProgress({title:"اكتملت الترجمة",remaining:"يمكنك الآن مراجعة النص وحفظه",percent:100});
     return translations;
+  }catch(error){
+    // Keep the schedule usable when the temporary Cloudflare/n8n endpoint is offline.
+    const fallback=items.map(item=>label==="الملاحظة"?translateNoteText(item.text):translateTaskText(item.text));
+    setItemTranslationProgress({title:"تمت الترجمة محلياً",remaining:"يمكنك مراجعة النص الإنجليزي قبل الحفظ",percent:100});
+    return fallback;
   }finally{clearInterval(timer);}
 }
 
