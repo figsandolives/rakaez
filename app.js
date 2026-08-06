@@ -14,7 +14,7 @@ const state = { user:null, demo:false, page:"employees", employees:[], entities:
 if (window.location.search) {
   window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash}`);
 }
-let attendanceRenderTimer=null;
+let attendanceRenderTimer=null; 
 let otpResendTimer=null;
 
 const icons = {
