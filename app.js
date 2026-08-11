@@ -1,7 +1,7 @@
 // Keep the AI connection files versioned so GitHub Pages never reuses an
 // outdated browser-cached endpoint after a deployment.
 import { CONFIG } from "./config.js?v=20260729-translation-endpoint";
-import { renderScheduleWorkspace } from "./schedules.js?v=20260806-overtime";
+import { renderScheduleWorkspace } from "./schedules.js?v=20260811-weekly-leave-fix";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import { getAuth, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { getDatabase, ref, get, set, push, onValue, remove, query, orderByChild, startAt, endAt } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
@@ -257,7 +257,7 @@ const leaveTypeLabel=leave=>leave?.type==="weekly"?"إجازة أسبوعية":l
 const leaveDateText=key=>{const date=dateFromKey(key);return `${arabicWeekdays[date.getDay()]} ${date.getDate()}-${date.getMonth()+1}-${date.getFullYear()}`;};
 function currentWeekDates(){const now=new Date(),start=new Date(now);start.setHours(12,0,0,0);start.setDate(now.getDate()-((now.getDay()-6+7)%7));return Array.from({length:7},(_,index)=>{const date=new Date(start);date.setDate(start.getDate()+index);return{key:localDateKey(date),name:arabicWeekdays[date.getDay()],date};});}
 function weeklyDaysFor(leave){const saved=Array.isArray(leave?.weeklyDays)?leave.weeklyDays.map(Number).filter(day=>Number.isInteger(day)&&day>=0&&day<=6):[];if(saved.length)return[...new Set(saved)];return[Number.isInteger(Number(leave?.weeklyDay))?Number(leave.weeklyDay):dateFromKey(leave?.startDate||localDateKey(new Date())).getDay()];}
-function leaveForEmployeeToday(employeeId){const today=localDateKey(new Date()),todayDate=dateFromKey(today);return state.leaves.find(leave=>{if(leave.employeeId!==employeeId)return false;if(leave.type==="weekly")return weeklyDaysFor(leave).includes(todayDate.getDay());return leave.startDate<=today&&leave.endDate>=today;});}
+function leaveForEmployeeToday(employeeId){const today=localDateKey(new Date()),todayDate=dateFromKey(today),employeeLeaves=state.leaves.filter(leave=>leave.employeeId===employeeId),latestWeekly=employeeLeaves.filter(leave=>leave.type==="weekly").sort((a,b)=>Number(b.updatedAt||b.createdAt||0)-Number(a.updatedAt||a.createdAt||0))[0];if(latestWeekly&&weeklyDaysFor(latestWeekly).includes(todayDate.getDay()))return latestWeekly;return employeeLeaves.filter(leave=>leave.type!=="weekly"&&leave.startDate<=today&&leave.endDate>=today).sort((a,b)=>Number(b.updatedAt||b.createdAt||0)-Number(a.updatedAt||a.createdAt||0))[0]||null;}
 function employeeLeaveSummary(employee){const leave=leaveForEmployeeToday(employee.id);return leave?`<span class="leave-current-status ${leave.duration==="half"?"half":"full"}">${escapeHtml(leaveTypeLabel(leave))}${leave.duration==="half"?" · نصف يوم":""}</span>`:"";}
 function calculateLeaveEnd(startDate,totalDays,skipDay){let date=dateFromKey(startDate),remaining=Math.max(1,Math.round(Number(totalDays)||1));while(remaining>0){if(skipDay===null||date.getDay()!==Number(skipDay))remaining--;if(remaining===0)return localDateKey(date);date.setDate(date.getDate()+1);}return startDate;}
 function leaveWeeksOptions(selected=""){return currentWeekDates().map(day=>`<option value="${day.key}" ${day.key===selected?"selected":""}>${day.name} · ${leaveDateText(day.key)}</option>`).join("");}
