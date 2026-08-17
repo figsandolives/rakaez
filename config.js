@@ -13,7 +13,7 @@ export const CONFIG = {
     employeeMessagesEnabled: false,
     loginOtpUrl: "https://burke-whereas-beginning-adding.trycloudflare.com/webhook/hrms-login-otp",
     verifyOtpUrl: "https://burke-whereas-beginning-adding.trycloudflare.com/webhook/hrms-verify-otp",
-    scheduleTranslationUrl: "https://lexington-maps-gcc-telecommunications.trycloudflare.com/webhook/hrms-schedule-translate",
+    scheduleTranslationUrl: "https://hearing-simpson-nyc-surprising.trycloudflare.com/webhook/hrms-schedule-translate",
     scheduleWhatsappUrl: "",
     emailOtpUrl: "",
     whatsappSignupOtpUrl: ""
