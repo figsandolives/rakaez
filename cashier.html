@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نظام إدارة المطاعم</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
+
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+    body {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Cairo', sans-serif;
+    }
+    
+    html, body, #app {
+      height: 100%;
+      width: 100%;
+    }
+    
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    
+    .modal-content {
+      background: white;
+      border-radius: 12px;
+      max-width: 90%;
+      max-height: 90%;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+    
+    .sidebar-item {
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    
+    .sidebar-item:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+      transform: translateX(-5px);
+    }
+    
+    .sidebar-item.active {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+    
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #10b981;
+      color: white;
+      padding: 16px 24px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      z-index: 2000;
+      animation: slideIn 0.3s ease;
+    }
+    
+    .toast.error {
+      background: #ef4444;
+    }
+    
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    th {
+      background: #667eea;
+      color: white;
+      padding: 12px;
+      text-align: right;
+      font-weight: 600;
+    }
+    
+    td {
+      padding: 12px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    tr:hover {
+      background-color: #f9fafb;
+    }
+    
+    .category-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 12px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    
+    .category-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+    }
+    
+    .product-card {
+      background: white;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    
+    .product-card:hover {
+      border-color: #667eea;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+    }
+    
+    .invoice-page {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: white;
+      z-index: 999;
+      overflow-y: auto;
+    }
+    
+    
+    .thermal-invoice {
+  width: 70mm;
+  margin: 0 auto;
+  padding: 5mm;
+  font-family: 'Cairo', sans-serif;
+  background: white;
+  font-size: 10px;
+}
+    
+    .quantity-input {
+      width: 60px;
+      text-align: center;
+      padding: 4px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    .invoice-product-toolbar {
+      display: flex;
+      align-items: stretch;
+      gap: 16px;
+      margin-bottom: 24px;
+      direction: ltr;
+    }
+
+    .invoice-product-search {
+      flex: 1;
+      min-width: 0;
+      margin-bottom: 0;
+      direction: rtl;
+    }
+
+    .invoice-total-box {
+      min-width: 150px;
+      min-height: 54px;
+      background: white;
+      border: 2px solid #bfdbfe;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12);
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 6px;
+      direction: ltr;
+      padding: 8px 14px;
+      white-space: nowrap;
+    }
+
+    .invoice-total-box.hidden {
+      display: none;
+    }
+
+    .invoice-total-value {
+      color: #2563eb;
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .invoice-total-currency {
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .production-sticker {
+      width: 50mm;
+      height: 25mm;
+      box-sizing: border-box;
+      padding: 0.8mm 1.2mm 0.5mm;
+      overflow: hidden;
+      background: white;
+      color: #000;
+      border: 1px solid #d1d5db;
+      border-radius: 1.5mm;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+      font-family: Arial, Tahoma, sans-serif;
+      line-height: 1;
+    }
+
+    .sticker-names {
+      text-align: center;
+      line-height: 0.98;
+      margin-bottom: 0.25mm;
+      flex: 0 0 auto;
+    }
+
+    .sticker-name-ar {
+      font-size: 7pt;
+      font-weight: 800;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sticker-name-en {
+      font-size: 4pt;
+      font-weight: 700;
+      direction: ltr;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sticker-ingredients {
+      font-size: 3.7pt;
+      font-weight: 700;
+      line-height: 1.05;
+      height: 4mm;
+      overflow: hidden;
+      text-align: right;
+      flex: 0 0 auto;
+    }
+
+    .sticker-meta-row,
+    .sticker-date-row {
+      font-size: 3.8pt;
+      font-weight: 800;
+      line-height: 1;
+      display: flex;
+      justify-content: space-between;
+      gap: 0.7mm;
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+
+    .sticker-barcode-wrap {
+      height: 4.6mm;
+      margin-top: 0.15mm;
+      direction: ltr;
+      flex: 0 0 auto;
+    }
+
+    .sticker-barcode {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .sticker-barcode-text {
+      direction: ltr;
+      text-align: center;
+      font-size: 3.4pt;
+      font-weight: 700;
+      line-height: 1;
+      margin-top: 0;
+      flex: 0 0 auto;
+    }
+
+    @media (max-width: 768px) {
+      .invoice-product-toolbar {
+        flex-direction: column;
+      }
+
+      .invoice-total-box {
+        align-self: flex-start;
+      }
+    }
+
+    /* Baking schedule */
+    .baking-page { min-height:100%; background:#f1f5f9; color:#172033; padding:28px; overflow:auto; }
+    .baking-topbar { max-width:1280px; margin:0 auto 22px; display:flex; align-items:center; justify-content:space-between; gap:18px; }
+    .baking-title { flex:1; }
+    .baking-eyebrow { margin:0 0 4px; color:#dc2626; font-weight:800; font-size:11px; letter-spacing:1.5px; direction:ltr; }
+    .baking-topbar h1 { margin:0; font-size:26px; font-weight:800; color:#14213d; }
+    .baking-topbar h1 span,.baking-topbar p { color:#64748b; font-size:14px; font-weight:600; }
+    .baking-topbar p { margin:5px 0 0; }
+    .baking-back,.baking-edit-toggle,.baking-print { border:0; border-radius:10px; padding:11px 16px; font-family:inherit; font-weight:800; cursor:pointer; white-space:nowrap; }
+    .baking-back { background:#e2e8f0; color:#334155; }.baking-actions{display:flex;gap:9px}.baking-edit-toggle{background:#fff;border:1px solid #cbd5e1;color:#1e3a5f}.baking-edit-toggle.is-active{background:#0f766e;color:#fff;border-color:#0f766e}.baking-print{background:#dc2626;color:#fff}
+    .baking-day-picker { max-width:580px; margin:8vh auto; background:#fff; padding:24px; border-radius:20px; box-shadow:0 20px 55px rgba(15,23,42,.12); display:grid; grid-template-columns:1fr; gap:12px; }
+    .baking-picker-copy { grid-column:1/-1; margin-bottom:8px; }.baking-picker-copy h2{margin:0;color:#14213d;font-size:25px}.baking-picker-copy p{color:#64748b;margin:7px 0 0;direction:ltr;text-align:right}
+    .baking-day-button{border:1px solid #dbe5f0;background:#f8fafc;border-radius:13px;padding:17px;text-align:right;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:2px;transition:.18s}.baking-day-button strong{font-size:18px;color:#1e3a5f}.baking-day-button span{color:#64748b;direction:ltr;text-align:right}.baking-day-button b{grid-row:1/3;grid-column:2;color:#dc2626;font-size:20px;align-self:center}.baking-day-button:hover{border-color:#dc2626;transform:translateY(-2px);box-shadow:0 8px 16px rgba(220,38,38,.1)}
+    .baking-sheet { max-width:1280px; margin:0 auto; background:#fff; border-radius:16px; padding:19px; box-shadow:0 16px 42px rgba(15,23,42,.1); }.baking-sheet-meta{display:flex;justify-content:space-between;gap:12px;color:#64748b;font-size:12px;font-weight:700;margin:0 3px 14px}.baking-table-wrap{overflow-x:auto}
+    .baking-table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid #dbe5f0;border-radius:12px;overflow:hidden}.baking-table th{background:#1e3a5f;color:#fff;padding:12px 9px;text-align:center;font-weight:800;border-left:1px solid rgba(255,255,255,.13);line-height:1.3}.baking-table th small{font-weight:600;color:#bfdbfe;direction:ltr}.baking-table td{padding:7px 8px;border-left:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;text-align:center;min-width:94px}.baking-table td:nth-child(2){text-align:right;min-width:220px}.baking-table td:nth-child(3){text-align:left;direction:ltr;min-width:220px}.baking-table tbody tr:last-child td{border-bottom:0}.baking-table .baking-section td{background:#1f2937;color:#fff;text-align:center!important;font-size:17px;font-weight:800;padding:12px 14px}.baking-section small{font-weight:600;margin-right:10px;color:#dbeafe;direction:ltr;font-size:12px}.baking-row-no{font-weight:800;color:#64748b;min-width:40px!important}.baking-cell-value{display:block;min-height:25px;padding:4px}.baking-name-en{direction:ltr;text-align:left}.baking-edit-input{width:100%;border:1px solid #bfdbfe;border-radius:7px;padding:7px;background:#f8fbff;outline:0;font-family:inherit}.baking-edit-input:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12)}.baking-add-cell{width:44px;min-width:44px!important}.baking-row-add{width:30px;height:30px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;font-size:20px;line-height:1}.baking-row-add:hover{background:#1e3a5f;color:#fff}.baking-special-add{margin-top:16px;padding:11px 14px;border:1px solid #fecaca;border-radius:10px;background:#fff;color:#dc2626;font-family:inherit;font-weight:800;cursor:pointer}.baking-special-add b{font-size:20px;vertical-align:-1px}.baking-special-add small{font-weight:600;direction:ltr}
+    .baking-row-controls{display:flex;align-items:center;justify-content:center;gap:4px}.baking-drag-handle,.baking-row-delete{width:30px;height:30px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:grab;font-size:18px;line-height:1}.baking-drag-handle{color:#475569}.baking-drag-handle:active{cursor:grabbing}.baking-row-delete{color:#dc2626;border-color:#fecaca}.baking-row-delete:hover{background:#fee2e2}.baking-row-dragging{opacity:.38}.baking-table tr.baking-drop-target td{box-shadow:inset 0 3px 0 #2563eb}.baking-final-drop td{background:#f8fafc!important;color:#64748b!important;font-size:12px;font-weight:700;text-align:center!important;padding:11px!important;border:2px dashed #cbd5e1!important}.baking-final-drop.baking-drop-target td{background:#dbeafe!important;color:#1d4ed8!important;border-color:#2563eb!important}
+    .baking-translate-all{display:block;margin:5px auto 0;border:1px solid #bfdbfe;border-radius:6px;background:#fff;color:#1d4ed8;padding:3px 8px;font:700 10px 'Cairo',sans-serif;cursor:pointer}.baking-translate-all:disabled{opacity:.65;cursor:wait}.baking-quantity-editor{display:flex;align-items:center;gap:5px;direction:ltr}.baking-quantity-editor .baking-edit-input{min-width:0;flex:1}.baking-quantity-editor b{color:#475569;font-size:12px;min-width:20px;text-align:left}
+    .baking-sent-status{align-self:center;color:#047857;background:#d1fae5;border:1px solid #6ee7b7;border-radius:10px;padding:10px 14px;font-weight:800}.baking-status-page{display:grid;place-items:center}.baking-status-card{width:min(460px,100%);padding:42px 28px;background:#fff;text-align:center;border-radius:20px;box-shadow:0 22px 55px rgba(15,23,42,.13)}.baking-status-card h1{font-size:25px;color:#172033;margin:15px 0 8px}.baking-status-card p{color:#64748b;margin:0 0 24px}.baking-status-icon{width:64px;height:64px;margin:auto;border-radius:50%;display:grid;place-items:center;background:#d1fae5;color:#047857;font-size:34px;font-weight:900}.baking-exit-button{background:#1e3a5f;color:#fff;border:0;border-radius:10px;padding:12px 35px;font:800 16px 'Cairo',sans-serif;cursor:pointer}.baking-loader{width:48px;height:48px;margin:auto;border:5px solid #dbeafe;border-top-color:#2563eb;border-radius:50%;animation:baking-spin .8s linear infinite}@keyframes baking-spin{to{transform:rotate(360deg)}}
+    @media (max-width: 768px) { .baking-page{padding:16px}.baking-topbar{align-items:flex-start;flex-wrap:wrap}.baking-title{order:3;flex-basis:100%}.baking-topbar h1{font-size:20px}.baking-actions{margin-inline-start:auto}.baking-day-picker{margin:25px auto;padding:20px;grid-template-columns:1fr}.baking-sheet{padding:10px}.baking-sheet-meta{flex-direction:column}.baking-table{min-width:850px} }
+
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+ </head>
+ <body>
+  <div id="app"></div>
+  <script src="cashier.js?v=20260916-baking-schedule-v5" defer></script>
+  <script src="label-print-bridge.js" defer></script>
+ </body>
+</html>
