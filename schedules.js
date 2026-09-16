@@ -252,7 +252,7 @@ async function translateItems(items,label){
     const body=ollama
       ? {model:localAI.model,stream:false,think:false,format:"json",options:{temperature:0.05,num_predict:Math.max(240,items.length*120)},messages}
       : {model:localAI.model,messages,temperature:0.05};
-    const response=await fetch(localAI.url,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
+    const response=await fetch(localAI.url,{method:"POST",headers:{"content-type":"application/json","Bypass-Tunnel-Reminder":"true"},body:JSON.stringify(body)});
     let payload;try{payload=await response.json();}catch{throw new Error("رد n8n ليس بصيغة JSON صالحة.");}
     if(!response.ok||payload?.ok===false)throw new Error(payload?.message||"تعذر اتصال Ollama المحلي بخدمة الترجمة.");
     const translations=extractItemTranslations(payload,items);
