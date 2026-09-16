@@ -238,7 +238,7 @@ function itemTranslationEstimate(items){const characters=items.reduce((total,ite
 function setItemTranslationProgress({title="",remaining="",percent=0,visible=true}={}){const status=$(".item-translation-status");if(!status)return;status.classList.toggle("hidden",!visible);const titleNode=status.querySelector(".item-translation-title"),etaNode=status.querySelector(".item-translation-eta"),bar=status.querySelector("em");if(title)titleNode.textContent=title;if(remaining)etaNode.textContent=remaining;if(bar)bar.style.width=`${Math.max(0,Math.min(100,percent))}%`;}
 function extractItemTranslations(payload,items){let response=payload;if(typeof response?.message?.content==="string"){try{response=JSON.parse(response.message.content);}catch{throw new Error("رد Ollama لا يحتوي JSON صالحاً للترجمة.");}}const raw=Array.isArray(response)?response:(response?.translations||response?.data?.translations||response?.output?.translations||response?.result?.translations||response?.data||response?.output||response?.result);const records=Array.isArray(raw)?raw:null;if(!records)throw new Error("رد n8n لا يحتوي على قائمة ترجمات صالحة.");const byId=new Map(records.map((item,index)=>[String(item?.id??index),String(item?.translation??item?.translation_text??item?.text??item?.translatedText??item?.english??"").trim()]));const result=items.map((item,index)=>byId.get(String(item.id))||byId.get(String(index))||"");if(result.some(text=>!text))throw new Error("رد n8n لم يترجم كل النصوص المطلوبة.");return result;}
 async function translateItems(items,label){
-  const localAI=ctx.CONFIG?.localAI;
+  const localAI={...ctx.CONFIG?.localAI,url:ctx.state.settings?.aiTranslationUrl||ctx.CONFIG?.localAI?.url};
   const estimated=itemTranslationEstimate(items),startedAt=Date.now();
   setItemTranslationProgress({title:`جاري ترجمة ${label} بالذكاء الاصطناعي...`,remaining:`الوقت المتوقع: ${estimated} ثوانٍ`,percent:12});
   const timer=setInterval(()=>{const elapsed=(Date.now()-startedAt)/1000,percent=Math.min(90,12+Math.round((elapsed/estimated)*78)),remaining=Math.max(1,Math.ceil(estimated-elapsed));setItemTranslationProgress({title:`جاري ترجمة ${label} بالذكاء الاصطناعي...`,remaining:`متبقي تقريباً ${remaining} ثوانٍ`,percent});},500);
@@ -259,10 +259,9 @@ async function translateItems(items,label){
     setItemTranslationProgress({title:"اكتملت الترجمة",remaining:"يمكنك الآن مراجعة النص وحفظه",percent:100});
     return translations;
   }catch(error){
-    console.warn("Local Ollama translation failed; using the built-in fallback.",error);
-    const fallback=items.map(item=>label==="الملاحظة"?translateNoteText(item.text):translateTaskText(item.text));
-    setItemTranslationProgress({title:"تعذر الاتصال بـ Ollama؛ استُخدمت ترجمة احتياطية",remaining:"راجع النص الإنجليزي قبل الحفظ",percent:100});
-    return fallback;
+    console.warn("Local Ollama translation failed.",error);
+    setItemTranslationProgress({title:"تعذر الاتصال بخادم الذكاء الاصطناعي",remaining:"تحقق من اتصال خادم الترجمة ثم أعد المحاولة",percent:100});
+    throw new Error("تعذر الاتصال بنموذج الذكاء الاصطناعي على خادم الترجمة. لم تُستخدم ترجمة احتياطية.");
   }finally{clearInterval(timer);}
 }
 
