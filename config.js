@@ -20,7 +20,7 @@ export const CONFIG = {
   },
   localAI: {
     provider: "ollama",
-    url: "https://rakaezaiqx91348.loca.lt/api/chat",
+    url: "https://grumpy-warthog-93.loca.lt/api/chat",
     model: "qwen3.5:9b"
   }
 };
