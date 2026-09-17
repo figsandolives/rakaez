@@ -1,7 +1,7 @@
 // Keep the AI connection files versioned so GitHub Pages never reuses an
 // outdated browser-cached endpoint after a deployment.
 import { CONFIG } from "./config.js?v=20260814-translation-endpoint";
-import { renderScheduleWorkspace } from "./schedules.js?v=20260822-holiday-settings";
+import { renderScheduleWorkspace } from "./schedules.js?v=20260917-ai-translation-dynamic";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import { getAuth, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { getDatabase, ref, get, set, push, onValue, remove, query, orderByChild, startAt, endAt } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
@@ -143,8 +143,20 @@ function renderEmployeeProfile(){
   arabicNameRow.querySelector("small").textContent="اسم الموظف بالعربي";
   arabicNameRow.querySelector("b").textContent=employeeArabicName(employee);
   arabicNameRow.insertAdjacentHTML("afterend",profileDataRow("اسم الموظف بالإنجليزي",employeeEnglishName(employee)));
+  $("#edit-employee").insertAdjacentHTML("beforebegin",'<button id="delete-employee" class="employee-delete">حذف الموظف</button>');
   $("#back-employees").onclick=()=>{state.page="employees";state.profileEmployeeId=null;renderPage();};
   $("#edit-employee").onclick=()=>openEmployeeEditor(employee.id);
+  $("#delete-employee").onclick=()=>deleteEmployee(employee);
+}
+
+async function deleteEmployee(employee){
+  if(!window.confirm(`هل تريد حذف الموظف «${employee.fullName}» نهائياً؟\nلا يمكن التراجع عن هذا الإجراء.`))return;
+  const button=$("#delete-employee");button.disabled=true;button.textContent="جارٍ الحذف...";
+  try{
+    if(state.demo)state.employees=state.employees.filter(item=>item.id!==employee.id);
+    else await remove(ref(db,`organizations/default/employees/${employee.id}`));
+    state.profileEmployeeId=null;state.page="employees";showToast(`تم حذف الموظف ${employee.fullName}`);renderNav();renderPage();
+  }catch(error){button.disabled=false;button.textContent="حذف الموظف";showErrorToast(error.message||"تعذر حذف الموظف.");}
 }
 
 async function readEmployeePhoto(file){
@@ -176,9 +188,11 @@ function openEmployeeEditor(employeeId){
   arabicNameInput.name="fullNameAr";arabicNameInput.value=employeeArabicName(employee);arabicNameLabel.firstChild.textContent="اسم الموظف بالعربي";
   arabicNameLabel.insertAdjacentHTML("afterend",`<label>اسم الموظف بالإنجليزي<input name="fullNameEn" dir="ltr" value="${escapeHtml(employeeEnglishName(employee))}" required></label>`);
   root.querySelector('[name="primaryPhone"]').value=primary.phone||"";
+  root.querySelector("footer").insertAdjacentHTML("afterbegin",'<button type="button" id="delete-employee-from-editor" class="employee-delete">حذف الموظف</button>');
   const close=()=>root.innerHTML="";
   $(".modal-close").onclick=$(".modal-cancel").onclick=close;
   $(".employee-editor-backdrop").onclick=event=>{if(event.target.classList.contains("employee-editor-backdrop"))close();};
+  $("#delete-employee-from-editor").onclick=()=>{close();deleteEmployee(employee);};
   bindEnglishNumbers(root);
   let nextPhotoDataUrl=employee.photoDataUrl||"";
   $("#editor-photo").onchange=async event=>{const file=event.target.files?.[0];if(!file)return;try{nextPhotoDataUrl=await readEmployeePhoto(file);$("#editor-photo-preview").innerHTML=`<img src="${escapeHtml(nextPhotoDataUrl)}" alt="معاينة الصورة">`;}catch(error){const message=$("#employee-editor-error");message.textContent=error.message;message.classList.remove("hidden");}};

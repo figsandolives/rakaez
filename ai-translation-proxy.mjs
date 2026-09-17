@@ -12,7 +12,7 @@ function cors(request, response) {
   if (allowedOrigins.has(origin)) response.setHeader("Access-Control-Allow-Origin", origin);
   response.setHeader("Vary", "Origin");
   response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type, Bypass-Tunnel-Reminder");
 }
 
 function send(response, status, payload) {
