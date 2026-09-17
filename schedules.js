@@ -238,30 +238,23 @@ function itemTranslationEstimate(items){const characters=items.reduce((total,ite
 function setItemTranslationProgress({title="",remaining="",percent=0,visible=true}={}){const status=$(".item-translation-status");if(!status)return;status.classList.toggle("hidden",!visible);const titleNode=status.querySelector(".item-translation-title"),etaNode=status.querySelector(".item-translation-eta"),bar=status.querySelector("em");if(title)titleNode.textContent=title;if(remaining)etaNode.textContent=remaining;if(bar)bar.style.width=`${Math.max(0,Math.min(100,percent))}%`;}
 function extractItemTranslations(payload,items){let response=payload;if(typeof response?.message?.content==="string"){try{response=JSON.parse(response.message.content);}catch{throw new Error("رد Ollama لا يحتوي JSON صالحاً للترجمة.");}}const raw=Array.isArray(response)?response:(response?.translations||response?.data?.translations||response?.output?.translations||response?.result?.translations||response?.data||response?.output||response?.result);const records=Array.isArray(raw)?raw:null;if(!records)throw new Error("رد n8n لا يحتوي على قائمة ترجمات صالحة.");const byId=new Map(records.map((item,index)=>[String(item?.id??index),String(item?.translation??item?.translation_text??item?.text??item?.translatedText??item?.english??"").trim()]));const result=items.map((item,index)=>byId.get(String(item.id))||byId.get(String(index))||"");if(result.some(text=>!text))throw new Error("رد n8n لم يترجم كل النصوص المطلوبة.");return result;}
 async function translateItems(items,label){
-  const localAI={...ctx.CONFIG?.localAI,url:ctx.state.settings?.aiTranslationUrl||ctx.CONFIG?.localAI?.url};
+  const url=ctx.CONFIG?.n8n?.scheduleTranslationUrl?.trim();
   const estimated=itemTranslationEstimate(items),startedAt=Date.now();
   setItemTranslationProgress({title:`جاري ترجمة ${label} بالذكاء الاصطناعي...`,remaining:`الوقت المتوقع: ${estimated} ثوانٍ`,percent:12});
   const timer=setInterval(()=>{const elapsed=(Date.now()-startedAt)/1000,percent=Math.min(90,12+Math.round((elapsed/estimated)*78)),remaining=Math.max(1,Math.ceil(estimated-elapsed));setItemTranslationProgress({title:`جاري ترجمة ${label} بالذكاء الاصطناعي...`,remaining:`متبقي تقريباً ${remaining} ثوانٍ`,percent});},500);
   try{
-    if(!localAI?.url||!localAI?.model)throw new Error("إعدادات Ollama المحلية غير مكتملة.");
-    const ollama=localAI.provider==="ollama";
-    const messages=[
-      {role:"system",content:"You translate Arabic HR schedule text into clear professional English. Return JSON only, with exactly this shape: {\"translations\":[{\"id\":\"item id\",\"translation\":\"English translation\"}]}. Return one non-empty translation for every supplied item. Preserve each id exactly. Do not add any text outside the JSON."},
-      {role:"user",content:JSON.stringify(items)}
-    ];
-    const body=ollama
-      ? {model:localAI.model,stream:false,think:false,format:"json",options:{temperature:0.05,num_predict:Math.max(240,items.length*120)},messages}
-      : {model:localAI.model,messages,temperature:0.05};
-    const response=await fetch(localAI.url,{method:"POST",headers:{"content-type":"application/json","Bypass-Tunnel-Reminder":"true"},body:JSON.stringify(body)});
+    if(!url)throw new Error("رابط n8n غير مضاف");
+    const response=await fetch(url,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"translate_schedule_items",sourceLanguage:"ar",targetLanguage:"en",context:"Professional HR branch schedule. Return clear English only.",items})});
     let payload;try{payload=await response.json();}catch{throw new Error("رد n8n ليس بصيغة JSON صالحة.");}
-    if(!response.ok||payload?.ok===false)throw new Error(payload?.message||"تعذر اتصال Ollama المحلي بخدمة الترجمة.");
+    if(!response.ok||payload?.ok===false)throw new Error(payload?.message||"تعذر اتصال n8n بخدمة الترجمة.");
     const translations=extractItemTranslations(payload,items);
     setItemTranslationProgress({title:"اكتملت الترجمة",remaining:"يمكنك الآن مراجعة النص وحفظه",percent:100});
     return translations;
   }catch(error){
-    console.warn("Local Ollama translation failed.",error);
-    setItemTranslationProgress({title:"تعذر الاتصال بخادم الذكاء الاصطناعي",remaining:"تحقق من اتصال خادم الترجمة ثم أعد المحاولة",percent:100});
-    throw new Error("تعذر الاتصال بنموذج الذكاء الاصطناعي على خادم الترجمة. لم تُستخدم ترجمة احتياطية.");
+    // Keep the schedule usable when the temporary Cloudflare/n8n endpoint is offline.
+    const fallback=items.map(item=>label==="الملاحظة"?translateNoteText(item.text):translateTaskText(item.text));
+    setItemTranslationProgress({title:"تمت الترجمة محلياً",remaining:"يمكنك مراجعة النص الإنجليزي قبل الحفظ",percent:100});
+    return fallback;
   }finally{clearInterval(timer);}
 }
 
