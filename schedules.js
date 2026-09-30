@@ -241,7 +241,11 @@ function extractItemTranslations(payload,items){let response=payload;if(typeof r
 async function translateItems(items,label){
   // The tunnel address changes whenever the local service reconnects.  It is
   // synchronized to Firebase, so never fall back to the stale build-time URL.
-  const localAI={...ctx.CONFIG?.localAI,url:ctx.state.settings?.aiTranslationUrl||""};
+  // Firebase settings can be saved by an older client. Only accept the
+  // permanent VPS URL from it; temporary tunnel URLs must never override it.
+  const permanentTranslationUrl=ctx.CONFIG?.localAI?.url||"";
+  const savedTranslationUrl=String(ctx.state.settings?.aiTranslationUrl||"");
+  const localAI={...ctx.CONFIG?.localAI,url:savedTranslationUrl.includes("162-35-27-249.sslip.io")?savedTranslationUrl:permanentTranslationUrl};
   const estimated=itemTranslationEstimate(items),startedAt=Date.now();
   setItemTranslationProgress({title:`جاري ترجمة ${label} بالذكاء الاصطناعي...`,remaining:`الوقت المتوقع: ${estimated} ثوانٍ`,percent:12});
   const timer=setInterval(()=>{const elapsed=(Date.now()-startedAt)/1000,percent=Math.min(90,12+Math.round((elapsed/estimated)*78)),remaining=Math.max(1,Math.ceil(estimated-elapsed));setItemTranslationProgress({title:`جاري ترجمة ${label} بالذكاء الاصطناعي...`,remaining:`متبقي تقريباً ${remaining} ثوانٍ`,percent});},500);

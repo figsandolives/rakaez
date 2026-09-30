@@ -20,7 +20,10 @@ export const CONFIG = {
   },
   localAI: {
     provider: "ollama",
-    url: "https://curvy-dolls-live.loca.lt/api/chat",
+    // Permanent VPS endpoint. Do not replace this with a temporary loca.lt
+    // or Cloudflare tunnel address: those stop working when the local device
+    // disconnects.
+    url: "https://162-35-27-249.sslip.io/api/chat",
     model: "qwen3.5:9b"
   }
 };
