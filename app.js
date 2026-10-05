@@ -18,6 +18,7 @@ let attendanceRenderTimer=null;
 let systemAlertFilters=new Set(["all"]);
 let openSystemShiftIds=new Set();
 let systemShiftPopover=null;
+let systemActionPopover=null;
 window.addEventListener("resize",()=>closeSystemShiftPopover());
 state.systemAlertSnapshot=null;
 let systemAlertClock=null;
@@ -353,6 +354,20 @@ function systemNotificationsReady(){return Boolean(state.systemAlertSnapshot?.da
 function maybeShowSystemNotifications(){if(!systemNotificationsReady())return;if(state.systemNotificationsShown)refreshSystemNotifications();else showSystemNotifications();}
 function systemNotificationDate(){return new Date().toLocaleDateString("ar-KW",{weekday:"long",year:"numeric",month:"long",day:"numeric"});}
 function systemNotificationEmployee(alert){return`<button type="button" class="system-employee-name" data-system-shifts="${escapeHtml(alert.id)}" aria-expanded="${openSystemShiftIds.has(alert.id)}">«${escapeHtml(alert.employeeName)}»</button>`;}
+function closeSystemActionPopover(){systemActionPopover?.remove();systemActionPopover=null;}
+function showSystemActionPopover(anchor,alert){
+ if(!alert)return;closeSystemActionPopover();closeSystemShiftPopover();
+ const panel=document.createElement("div");panel.className="system-action-floating";panel.dataset.alertId=alert.id;
+ panel.innerHTML=systemNotificationReportButton(alert)+systemNotificationHideButton(alert);document.body.append(panel);systemActionPopover=panel;
+ const rect=anchor.getBoundingClientRect(),size=panel.getBoundingClientRect();
+ panel.style.left=`${Math.max(8,Math.min(window.innerWidth-size.width-8,rect.left))}px`;
+ panel.style.top=`${rect.bottom+8+size.height<=window.innerHeight-8?rect.bottom+8:Math.max(8,rect.top-size.height-8)}px`;
+ panel.querySelector("[data-report-attendance-alert]").onclick=event=>reportAttendanceAlert(alert,event.currentTarget);
+ panel.querySelector("[data-hide-system-notification]").onclick=async event=>{await hideSystemNotification(alert,event.currentTarget);closeSystemActionPopover();};
+}
+window.addEventListener("resize",closeSystemActionPopover);
+document.addEventListener("pointerdown",event=>{if(systemActionPopover&&!systemActionPopover.contains(event.target)&&!event.target.closest(".system-alert-menu summary"))closeSystemActionPopover();});
+document.addEventListener("keydown",event=>{if(event.key==="Escape")closeSystemActionPopover();});
 function closeSystemShiftPopover(){if(systemShiftPopover){const id=systemShiftPopover.dataset.alertId;document.querySelectorAll("[data-system-shifts]").forEach(button=>{if(button.dataset.systemShifts===id)button.setAttribute("aria-expanded","false");});systemShiftPopover.remove();systemShiftPopover=null;}}
 function showSystemShiftPopover(button,alert){
  if(!alert)return;closeSystemShiftPopover();
@@ -378,7 +393,7 @@ function systemNotificationsBody(){if(!systemNotificationsReady())return'<div cl
 async function reportAttendanceAlert(alert,button){button.disabled=true;button.classList.add("loading");button.innerHTML="جارٍ التنبيه...";const notification={id:alert.id,type:"attendance_alert",alertKind:alert.kind,employeeId:alert.employeeId,title:"تنبيه: الحضور والانصراف",message:employeeAttendanceAlertText(alert),scheduleDate:alert.date,dayName:systemNotificationDate(),createdAt:Date.now(),read:false,severity:"danger"};try{if(!state.demo)await set(ref(db,`organizations/default/employeeNotifications/${alert.employeeId}/${alert.id}`),notification);button.classList.remove("loading");button.classList.add("reported");button.innerHTML="✓ تم التنبيه";}catch(error){button.disabled=false;button.classList.remove("loading");button.textContent="تنبيه الموظف";showErrorToast(error.message||"تعذر إرسال التنبيه للموظف.");}}
 async function hideSystemNotification(alert,button){button.disabled=true;const previous={...state.dismissedSystemNotifications};state.dismissedSystemNotifications[alert.id]={hiddenAt:Date.now()};refreshSystemNotifications();try{if(!state.demo)await set(ref(db,`organizations/default/systemNotificationDismissals/${alert.date}/${alert.id}`),{hiddenAt:Date.now()});}catch(error){state.dismissedSystemNotifications=previous;refreshSystemNotifications();showErrorToast(error.message||"تعذر إخفاء الملاحظة.");}}
 function bindSystemNotificationActions(){
- document.querySelector(".system-notifications-list")?.addEventListener("scroll",closeSystemShiftPopover,{passive:true});
+ document.querySelector(".system-notifications-list")?.addEventListener("scroll",()=>{closeSystemShiftPopover();closeSystemActionPopover();},{passive:true});
  document.querySelectorAll("[data-system-shifts]").forEach(button=>{
  const alert=systemNotifications().find(item=>item.id===button.dataset.systemShifts);
  button.onclick=()=>showSystemShiftPopover(button,alert);
@@ -387,12 +402,12 @@ function bindSystemNotificationActions(){
  button.onfocus=()=>showSystemShiftPopover(button,alert);
  button.onblur=closeSystemShiftPopover;
  });
- document.querySelectorAll(".system-alert-menu summary").forEach(summary=>summary.onclick=()=>{document.querySelectorAll(".system-alert-menu").forEach(menu=>{if(menu!==summary.parentElement)menu.open=false;});});
+ document.querySelectorAll(".system-alert-menu summary").forEach(summary=>summary.onclick=event=>{event.preventDefault();const id=summary.closest("article").querySelector("[data-system-shifts]").dataset.systemShifts;const alert=systemNotifications().find(item=>item.id===id);if(systemActionPopover?.dataset.alertId===id)closeSystemActionPopover();else showSystemActionPopover(summary,alert);});
 document.querySelectorAll("[data-alert-filter]").forEach(input=>input.onchange=()=>{
  const value=input.dataset.alertFilter;systemAlertFilters=new Set([value]);refreshSystemNotifications();
 });const alerts=systemNotifications();document.querySelectorAll("[data-report-attendance-alert]").forEach(button=>button.onclick=()=>{const alert=alerts.find(item=>item.id===button.dataset.reportAttendanceAlert);if(alert)reportAttendanceAlert(alert,button);});document.querySelectorAll("[data-hide-system-notification]").forEach(button=>button.onclick=()=>{const alert=alerts.find(item=>item.id===button.dataset.hideSystemNotification);if(alert)hideSystemNotification(alert,button);});}
-function refreshSystemNotifications(){closeSystemShiftPopover();const body=$("#system-notifications-body");if(body){body.innerHTML=systemNotificationsBody();bindSystemNotificationActions();}}
-function showSystemNotifications(){if(state.systemNotificationsShown)return;state.systemNotificationsShown=true;const root=$("#modal-root");root.innerHTML=`<div class="modal-backdrop system-notifications-backdrop"><section class="modal system-notifications-modal" role="dialog" aria-modal="true" aria-labelledby="system-notifications-title"><header><div><span>متابعة الحضور والانصراف</span><h3 id="system-notifications-title">إشعارات النظام</h3></div><button type="button" class="modal-close" aria-label="إغلاق إشعارات النظام">×</button></header><div id="system-notifications-body" class="system-notifications-content">${systemNotificationsBody()}</div><footer><button type="button" id="close-system-notifications" class="primary">إغلاق</button></footer></section></div>`;bindSystemNotificationActions();const close=()=>{closeSystemShiftPopover();root.innerHTML="";document.removeEventListener("keydown",onKeydown);};const onKeydown=event=>{if(event.key==="Escape")close();};root.querySelector(".modal-close").onclick=root.querySelector("#close-system-notifications").onclick=close;root.querySelector(".system-notifications-backdrop").onclick=event=>{if(event.target.classList.contains("system-notifications-backdrop"))close();};document.addEventListener("keydown",onKeydown);root.querySelector(".modal-close").focus();}
+function refreshSystemNotifications(){closeSystemActionPopover();closeSystemShiftPopover();const body=$("#system-notifications-body");if(body){body.innerHTML=systemNotificationsBody();bindSystemNotificationActions();}}
+function showSystemNotifications(){if(state.systemNotificationsShown)return;state.systemNotificationsShown=true;const root=$("#modal-root");root.innerHTML=`<div class="modal-backdrop system-notifications-backdrop"><section class="modal system-notifications-modal" role="dialog" aria-modal="true" aria-labelledby="system-notifications-title"><header><div><span>متابعة الحضور والانصراف</span><h3 id="system-notifications-title">إشعارات النظام</h3></div><button type="button" class="modal-close" aria-label="إغلاق إشعارات النظام">×</button></header><div id="system-notifications-body" class="system-notifications-content">${systemNotificationsBody()}</div><footer><button type="button" id="close-system-notifications" class="primary">إغلاق</button></footer></section></div>`;bindSystemNotificationActions();const close=()=>{closeSystemActionPopover();closeSystemShiftPopover();root.innerHTML="";document.removeEventListener("keydown",onKeydown);};const onKeydown=event=>{if(event.key==="Escape")close();};root.querySelector(".modal-close").onclick=root.querySelector("#close-system-notifications").onclick=close;root.querySelector(".system-notifications-backdrop").onclick=event=>{if(event.target.classList.contains("system-notifications-backdrop"))close();};document.addEventListener("keydown",onKeydown);root.querySelector(".modal-close").focus();}
 function legacyPunchTimestamp(punch,date){const value=Date.parse(punch?.iso||"")||Date.parse(`${date||""}T${punch?.timeExact||punch?.time||"00:00"}`)||Number(punch?.createdAt||0);return Number.isFinite(value)&&value>0?value:0;}
 function legacyEmployee(punch){const id=String(punch?.empId||"");const name=String(punch?.empName||"").trim();return state.employees.find(item=>item.id===id)||state.employees.find(item=>String(item.fullName||"").trim()===name)||null;}
 function legacyAttendanceGroups(){const groups={};Object.entries(state.legacyAttendance||{}).forEach(([punchId,punch])=>{if(!punch||typeof punch!=="object")return;const date=String(punch.date||"").slice(0,10)||localToday(),employee=legacyEmployee(punch),id=employee?.id||`legacy:${punch.empId||punch.empName||punchId}`,timestamp=legacyPunchTimestamp(punch,date);if(!timestamp)return;groups[date]??={};groups[date][id]??=[];groups[date][id].push({id:punchId,timestamp,type:punch.type==="out"?"checkOut":"checkIn",branchName:punch.location?.branchName||punch.location?.branchKey||punch.branchName||"",employeeName:punch.empName||employee?.fullName||""});});return groups;}
