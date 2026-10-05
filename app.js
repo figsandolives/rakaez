@@ -463,6 +463,7 @@ async function createDeductionPdf(record,download=true){
     await Promise.all([...root.querySelectorAll("img")].map(image=>image.complete?Promise.resolve():new Promise(resolve=>{image.onload=image.onerror=resolve;})));
     const canvas=await window.html2canvas(root.firstElementChild,{scale:2,backgroundColor:"#fff",useCORS:true,logging:false}),{jsPDF}=window.jspdf,pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true});
     pdf.addImage(canvas.toDataURL("image/jpeg",.96),"JPEG",0,0,210,297,undefined,"FAST");
+    if(download==="preview")return canvas.toDataURL("image/png");
     if(download)pdf.save(`كتاب خصم - ${record.bookNumber} - ${deductionEmployee(record).fullName}.pdf`);
     else return pdf.output("blob");
   }finally{root.remove();}
@@ -482,10 +483,9 @@ async function showDeductionPdf(recordId){
   document.addEventListener("keydown",onKey);
   backdrop.querySelector(".modal-close").focus();
   try{
-    const blob=await createDeductionPdf(record,false);
+    const pageImage=await createDeductionPdf(record,"preview");
     if(closed||!backdrop.isConnected)return;
-    url=URL.createObjectURL(blob);
-    const frame=document.createElement("iframe");frame.title="معاينة كتاب الخصم PDF";frame.src=url+"#toolbar=0&navpanes=0&view=FitH";content.replaceChildren(frame);
+    const image=document.createElement("img");image.alt="صفحة كتاب الخصم كاملة";image.src=pageImage;content.replaceChildren(image);
   }catch(error){if(!closed)content.textContent=error.message||"تعذر عرض PDF.";}
 }
 async function deleteDeductionBook(recordId){
