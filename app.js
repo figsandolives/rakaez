@@ -394,8 +394,19 @@ function deductionBookNumber(){
 function deductionEmployee(record){return state.employees.find(employee=>employee.id===record.employeeId)||{fullName:record.employeeName||"موظف غير موجود"};}
 function renderDeductionBooks(){
   const records=[...state.deductions].sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
-  $("#page-content").innerHTML=`<section class="deduction-page"><div class="deduction-heading"><div><span class="eyebrow">المراسلات الإدارية</span><h1>كتب الخصم</h1><p>إنشاء وإدارة كتب الخصم الرسمية للموظفين.</p></div><button id="create-deduction" class="primary">＋ إنشاء كتاب خصم</button></div><section class="deduction-list-card"><div class="deduction-table-wrap"><table class="deduction-table"><thead><tr><th>رقم الكتاب</th><th>التاريخ</th><th>موجّه إلى</th><th>إجراءات</th></tr></thead><tbody>${records.length?records.map(record=>{const employee=deductionEmployee(record);return`<tr><td><b dir="ltr">${escapeHtml(record.bookNumber||"—")}</b></td><td dir="ltr">${deductionDateText(record.date)}</td><td><span class="deduction-person"><i>${initials(employee.fullName)}</i><b>${escapeHtml(employee.fullName)}</b></span></td><td><div class="deduction-actions"><button class="deduction-edit" data-edit-deduction="${escapeHtml(record.id)}">تعديل</button><button class="deduction-delete" data-delete-deduction="${escapeHtml(record.id)}">حذف</button></div></td></tr>`;}).join(""):`<tr><td colspan="4"><div class="deduction-empty"><i>▤</i><b>لا توجد كتب خصم بعد</b><span>ابدأ بإنشاء أول كتاب خصم للموظفين.</span></div></td></tr>`}</tbody></table></div></section></section>`;
+  $("#page-content").innerHTML=`<section class="deduction-page"><div class="deduction-heading"><div><span class="eyebrow">المراسلات الإدارية</span><h1>كتب الخصم</h1><p>إنشاء وإدارة كتب الخصم الرسمية للموظفين.</p></div><button id="create-deduction" class="primary">＋ إنشاء كتاب خصم</button></div><section class="deduction-list-card"><div class="deduction-table-wrap"><table class="deduction-table"><thead><tr><th>رقم الكتاب</th><th>التاريخ</th><th>موجّه إلى</th><th>المبلغ المخصوم</th><th>إجراءات</th></tr></thead><tbody>${records.length?records.map(record=>{const employee=deductionEmployee(record);return`<tr><td><b dir="ltr">${escapeHtml(record.bookNumber||"—")}</b></td><td dir="ltr">${deductionDateText(record.date)}</td><td><span class="deduction-person"><i>${initials(employee.fullName)}</i><b>${escapeHtml(employee.fullName)}</b></span></td><td><b dir="ltr">${escapeHtml(record.amount)}</b> د.ك</td><td><div class="deduction-actions"><button class="deduction-edit" data-view-deduction="${escapeHtml(record.id)}">عرض</button><details class="deduction-menu"><summary aria-label="خيارات الكتاب">⋮</summary><div class="deduction-menu-items"><button data-edit-deduction="${escapeHtml(record.id)}">تعديل</button><button class="deduction-delete" data-delete-deduction="${escapeHtml(record.id)}">حذف</button><button data-download-deduction="${escapeHtml(record.id)}">تحميل PDF</button></div></details></div></td></tr>`;}).join(""):`<tr><td colspan="5"><div class="deduction-empty"><i>▤</i><b>لا توجد كتب خصم بعد</b><span>ابدأ بإنشاء أول كتاب خصم للموظفين.</span></div></td></tr>`}</tbody></table></div></section></section>`;
   $("#create-deduction").onclick=()=>openDeductionModal();
+  document.querySelectorAll("[data-view-deduction]").forEach(button=>button.onclick=()=>showDeductionPdf(button.dataset.viewDeduction));
+  document.querySelectorAll("[data-download-deduction]").forEach(button=>button.onclick=async()=>{
+    button.closest("details").open=false;
+    const record=state.deductions.find(item=>item.id===button.dataset.downloadDeduction);
+    if(!record)return;
+    button.disabled=true;
+    try{await createDeductionPdf(record);}catch(error){showErrorToast(error.message||"تعذر تحميل الكتاب.");}finally{button.disabled=false;}
+  });
+  document.querySelectorAll(".deduction-menu").forEach(menu=>{
+    menu.querySelector("summary").onclick=()=>document.querySelectorAll(".deduction-menu").forEach(other=>{if(other!==menu)other.open=false;});
+  });
   document.querySelectorAll("[data-edit-deduction]").forEach(button=>button.onclick=()=>openDeductionModal(button.dataset.editDeduction));
   document.querySelectorAll("[data-delete-deduction]").forEach(button=>button.onclick=()=>deleteDeductionBook(button.dataset.deleteDeduction));
 }
@@ -428,11 +439,9 @@ async function saveDeductionBook(event,existing){
     if(!state.demo&&state.user)await set(ref(db,`organizations/default/deductions/${record.id}`),record);
     const index=state.deductions.findIndex(item=>item.id===record.id);
     if(index>=0)state.deductions.splice(index,1,record);else state.deductions.unshift(record);
-    updateDeductionLoading("يتم الآن إعداد صفحة A4 وتحميل الملف...");
-    await createDeductionPdf(record);
     $("#modal-root").innerHTML="";
     if(state.page==="deduction")renderDeductionBooks();
-    showToast(`تم ${existing?"تحديث":"إنشاء"} كتاب الخصم ${record.bookNumber} وتحميله`);
+    showToast(`تم ${existing?"تحديث":"إنشاء"} كتاب الخصم ${record.bookNumber}`);
   }catch(saveError){
     $("#modal-root").innerHTML="";
     showErrorToast(saveError.message||"تعذر تجهيز كتاب الخصم.");
@@ -446,7 +455,7 @@ function deductionLetterHtml(record){
   const employee=deductionEmployee(record),companyLogo=state.settings.companyLogoUrl||state.settings.companyLogoDataUrl,stamp=record.signed?state.settings.approvalStampDataUrl:"";
   return `<article class="deduction-letter" dir="rtl"><header class="deduction-letter-head"><div class="deduction-letter-brand" style="display:grid;justify-items:center;gap:8px;text-align:center">${companyLogo?`<img src="${escapeHtml(companyLogo)}" crossorigin="anonymous" alt="شعار المنشأة" width="110" height="82" style="width:110px;height:82px;object-fit:contain">`:""}<span style="color:#506173;font-size:9px;font-weight:800;line-height:1.45">إدارة الموارد البشرية والشؤون الإدارية</span></div></header><div class="deduction-letter-meta"><span>رقم الكتاب: <b dir="ltr">${escapeHtml(record.bookNumber)}</b></span><span>التاريخ: <b dir="ltr">${deductionDateText(record.date)}</b></span></div><h1>كتاب خصم من الراتب</h1><section class="deduction-letter-body"><h2>إلى الموظف / ${escapeHtml(employee.fullName)}</h2><p>السلام عليكم ورحمة الله وبركاته،</p><p>بناءً على الصلاحيات الإدارية المخولة لنا، تقرر إخطاركم بخصم مبلغ وقدره <strong dir="rtl">( <b dir="ltr">${escapeHtml(record.amount)}</b> دينار كويتي )</strong> من مستحقات راتبكم الشهري القادم، وذلك للأسباب الموضحة أدناه:</p><div class="deduction-reason-box"><h3>أسباب الخصم بالتفصيل:</h3><p>${escapeHtml(record.reason).replace(/\n/g,"<br>")}</p></div><p class="deduction-closing">نهيب بكم الالتزام الكامل بقوانين العمل والتعليمات الإدارية، تفادياً لاتخاذ إجراءات إدارية أشد في المرات القادمة.<br>وتقبلوا فائق الاحترام والتقدير.</p></section><footer class="deduction-approval"><b>اعتماد مدير الموارد البشرية:</b><div>${stamp?`<img src="${escapeHtml(stamp)}" alt="توقيع واعتماد مدير الموارد البشرية">`:"<span></span>"}</div><i>التوقيع</i></footer></article>`;
 }
-async function createDeductionPdf(record){
+async function createDeductionPdf(record,download=true){
   if(!window.html2canvas||!window.jspdf)throw new Error("تعذر تحميل أداة تجهيز PDF. حدّث الصفحة وحاول مرة أخرى.");
   const root=document.createElement("div");root.className="deduction-letter-render";root.innerHTML=deductionLetterHtml(record);document.body.append(root);
   try{
@@ -454,8 +463,30 @@ async function createDeductionPdf(record){
     await Promise.all([...root.querySelectorAll("img")].map(image=>image.complete?Promise.resolve():new Promise(resolve=>{image.onload=image.onerror=resolve;})));
     const canvas=await window.html2canvas(root.firstElementChild,{scale:2,backgroundColor:"#fff",useCORS:true,logging:false}),{jsPDF}=window.jspdf,pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true});
     pdf.addImage(canvas.toDataURL("image/jpeg",.96),"JPEG",0,0,210,297,undefined,"FAST");
-    pdf.save(`كتاب خصم - ${record.bookNumber} - ${deductionEmployee(record).fullName}.pdf`);
+    if(download)pdf.save(`كتاب خصم - ${record.bookNumber} - ${deductionEmployee(record).fullName}.pdf`);
+    else return pdf.output("blob");
   }finally{root.remove();}
+}
+async function showDeductionPdf(recordId){
+  const record=state.deductions.find(item=>item.id===recordId);
+  if(!record)return;
+  document.querySelectorAll(".deduction-menu").forEach(menu=>menu.open=false);
+  const root=$("#modal-root");
+  root.innerHTML=`<div class="modal-backdrop deduction-preview-backdrop"><section class="modal deduction-preview-modal" role="dialog" aria-modal="true" aria-labelledby="deduction-preview-title"><header><h3 id="deduction-preview-title">عرض كتاب الخصم — ${escapeHtml(record.bookNumber)}</h3><button type="button" class="modal-close" aria-label="إغلاق">×</button></header><div class="deduction-preview-content"><p role="status">جارٍ تجهيز PDF...</p></div></section></div>`;
+  const backdrop=root.firstElementChild,content=backdrop.querySelector(".deduction-preview-content");
+  let closed=false,url="";
+  const close=()=>{closed=true;if(url)URL.revokeObjectURL(url);backdrop.remove();document.removeEventListener("keydown",onKey);};
+  const onKey=event=>{if(event.key==="Escape")close();};
+  backdrop.querySelector(".modal-close").onclick=close;
+  backdrop.onclick=event=>{if(event.target===backdrop)close();};
+  document.addEventListener("keydown",onKey);
+  backdrop.querySelector(".modal-close").focus();
+  try{
+    const blob=await createDeductionPdf(record,false);
+    if(closed||!backdrop.isConnected)return;
+    url=URL.createObjectURL(blob);
+    const frame=document.createElement("iframe");frame.title="معاينة كتاب الخصم PDF";frame.src=url+"#toolbar=0&navpanes=0&view=FitH";content.replaceChildren(frame);
+  }catch(error){if(!closed)content.textContent=error.message||"تعذر عرض PDF.";}
 }
 async function deleteDeductionBook(recordId){
   const record=state.deductions.find(item=>item.id===recordId);
