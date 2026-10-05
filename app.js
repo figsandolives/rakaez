@@ -4,7 +4,7 @@ import { CONFIG } from "./config.js?v=20260930-vps-translation";
 import { renderScheduleWorkspace } from "./schedules.js?v=20260930-vps-translation";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import { getAuth, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-import { getDatabase, ref, get, set, push, onValue, remove, query, orderByChild, startAt, endAt } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
+import { getDatabase, ref, get, set, push, update, onValue, remove, query, orderByChild, startAt, endAt } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
 
 const app = initializeApp(CONFIG.firebase);
 const auth = getAuth(app);
@@ -433,20 +433,31 @@ async function saveDeductionBook(event,existing){
   if(!Number(amount)||Number(amount)<=0){error.textContent="أدخل مبلغ خصم صحيحاً أكبر من صفر.";error.classList.remove("hidden");return;}
   if(!reason){error.textContent="اكتب سبب وتفاصيل الخصم.";error.classList.remove("hidden");return;}
   const record={...(existing||{}),id:existing?.id||crypto.randomUUID(),bookNumber:existing?.bookNumber||deductionBookNumber(),employeeId:employee.id,employeeName:employee.fullName,amount,date,reason,signed:Boolean($("#deduction-signed")?.checked&&state.settings.approvalStampDataUrl),createdAt:existing?.createdAt||Date.now(),updatedAt:Date.now()};
-  showDeductionLoading(existing?"جارٍ تحديث وتجهيز الكتاب...":"جارٍ إنشاء وتجهيز الكتاب...");
-  try{
-    await sleep(650);
-    if(!state.demo&&state.user)await set(ref(db,`organizations/default/deductions/${record.id}`),record);
-    const index=state.deductions.findIndex(item=>item.id===record.id);
-    if(index>=0)state.deductions.splice(index,1,record);else state.deductions.unshift(record);
-    $("#modal-root").innerHTML="";
-    if(state.page==="deduction")renderDeductionBooks();
-    showToast(`تم ${existing?"تحديث":"إنشاء"} كتاب الخصم ${record.bookNumber}`);
-  }catch(saveError){
-    $("#modal-root").innerHTML="";
-    showErrorToast(saveError.message||"تعذر تجهيز كتاب الخصم.");
-  }
+  await showDeductionPdf(record.id,record,async button=>{
+    button.disabled=true;button.dataset.sending="true";button.textContent="جارٍ الاعتماد والإرسال...";
+    try{
+      if(!existing)record.bookNumber=deductionBookNumber();
+      const pdfDataUrl=await createDeductionPdf(record,"dataurl"),notificationId=`deduction-${record.id}`;
+      const notification={id:notificationId,type:"deduction",employeeId:record.employeeId,title:"كتاب خصم من الراتب",amount:record.amount,reason:record.reason,bookNumber:record.bookNumber,pdfPath:`organizations/default/deductionFiles/${record.id}`,pdfFilename:`${record.bookNumber}.pdf`,scheduleDate:record.date,createdAt:Date.now(),read:false};
+      if(!state.demo){
+        if(!state.user)throw new Error("يرجى تسجيل الدخول لاعتماد الكتاب.");
+        const changes={};
+        changes[`deductions/${record.id}`]=record;
+        changes[`deductionFiles/${record.id}`]={dataUrl:pdfDataUrl,employeeId:record.employeeId};
+        changes[`employeeNotifications/${record.employeeId}/${notificationId}`]=notification;
+        if(existing&&existing.employeeId!==record.employeeId)changes[`employeeNotifications/${existing.employeeId}/${notificationId}`]=null;
+        await update(ref(db,"organizations/default"),changes);
+      }
+      const index=state.deductions.findIndex(item=>item.id===record.id);
+      if(index>=0)state.deductions.splice(index,1,record);else state.deductions.unshift(record);
+      delete button.dataset.sending;
+      button.closest(".deduction-preview-backdrop").querySelector(".modal-close").click();
+      if(state.page==="deduction")renderDeductionBooks();
+      showToast(state.demo?"تم اعتماد الكتاب في الوضع التجريبي":"تم اعتماد الكتاب وإرساله للموظف");
+    }catch(error){delete button.dataset.sending;button.disabled=false;button.textContent="اعتماد وإرسال";showErrorToast(error.message||"تعذر اعتماد وإرسال الكتاب.");}
+  });
 }
+
 function showDeductionLoading(title){
   $("#modal-root").innerHTML=`<div class="deduction-generation-loading" role="status" aria-live="polite"><section><div class="deduction-paper-animation"><span></span><i>✓</i></div><small>نظام المراسلات الإدارية</small><h2 id="deduction-loading-title">${escapeHtml(title)}</h2><p>نرتب بيانات الموظف والاعتماد في قالب رسمي جاهز للطباعة.</p><div class="deduction-loading-line"><i></i></div></section></div>`;
 }
@@ -464,19 +475,25 @@ async function createDeductionPdf(record,download=true){
     const canvas=await window.html2canvas(root.firstElementChild,{scale:2,backgroundColor:"#fff",useCORS:true,logging:false}),{jsPDF}=window.jspdf,pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true});
     pdf.addImage(canvas.toDataURL("image/jpeg",.96),"JPEG",0,0,210,297,undefined,"FAST");
     if(download==="preview")return canvas.toDataURL("image/png");
+    if(download==="dataurl")return pdf.output("datauristring");
     if(download)pdf.save(`كتاب خصم - ${record.bookNumber} - ${deductionEmployee(record).fullName}.pdf`);
     else return pdf.output("blob");
   }finally{root.remove();}
 }
-async function showDeductionPdf(recordId){
-  const record=state.deductions.find(item=>item.id===recordId);
+async function showDeductionPdf(recordId,draft=null,onApprove=null){
+  const record=draft||state.deductions.find(item=>item.id===recordId);
   if(!record)return;
   document.querySelectorAll(".deduction-menu").forEach(menu=>menu.open=false);
   const root=$("#modal-root");
   root.innerHTML=`<div class="modal-backdrop deduction-preview-backdrop"><section class="modal deduction-preview-modal" role="dialog" aria-modal="true" aria-labelledby="deduction-preview-title"><header><h3 id="deduction-preview-title">عرض كتاب الخصم — ${escapeHtml(record.bookNumber)}</h3><button type="button" class="modal-close" aria-label="إغلاق">×</button></header><div class="deduction-preview-content"><p role="status">جارٍ تجهيز PDF...</p></div></section></div>`;
+  if(onApprove){
+    const footer=document.createElement("footer"),button=document.createElement("button");
+    button.type="button";button.className="primary";button.textContent="اعتماد وإرسال";button.disabled=true;
+    button.onclick=()=>onApprove(button);footer.append(button);root.querySelector(".deduction-preview-modal").append(footer);
+  }
   const backdrop=root.firstElementChild,content=backdrop.querySelector(".deduction-preview-content");
   let closed=false,url="";
-  const close=()=>{closed=true;if(url)URL.revokeObjectURL(url);backdrop.remove();document.removeEventListener("keydown",onKey);};
+  const close=()=>{if(backdrop.querySelector("[data-sending]") )return;closed=true;if(url)URL.revokeObjectURL(url);backdrop.remove();document.removeEventListener("keydown",onKey);};
   const onKey=event=>{if(event.key==="Escape")close();};
   backdrop.querySelector(".modal-close").onclick=close;
   backdrop.onclick=event=>{if(event.target===backdrop)close();};
@@ -486,6 +503,7 @@ async function showDeductionPdf(recordId){
     const pageImage=await createDeductionPdf(record,"preview");
     if(closed||!backdrop.isConnected)return;
     const image=document.createElement("img");image.alt="صفحة كتاب الخصم كاملة";image.src=pageImage;content.replaceChildren(image);
+    const approval=backdrop.querySelector("footer button");if(approval)approval.disabled=false;
   }catch(error){if(!closed)content.textContent=error.message||"تعذر عرض PDF.";}
 }
 async function deleteDeductionBook(recordId){
