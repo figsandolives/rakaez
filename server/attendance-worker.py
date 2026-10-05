@@ -81,8 +81,8 @@ def calculate(date,now,employees,schedule,attendance,legacy):
                 early=max(0,int((end.timestamp()-float(checkout['timestamp'])/1000)//60));status['departure']='early' if early else 'completed'
                 if early:add('early','خرج الموظف',f'مبكراً من دوامه في فرع {branch} {early} دقيقة.',early)
             else:
-                status['departure']='missing_checkout' if checkin and now>=end else 'pending'
-                if checkin and now>=end:add('missing_checkout','لم يقم الموظف',f'ببصمة خروج في فرع {branch} إلى الآن.')
+                status['departure']='missing_checkout' if now>=end else 'pending'
+                if now>=end:add('missing_checkout','لم يقم الموظف',f'ببصمة خروج في فرع {branch} إلى الآن.')
             states[f'{employee_id}-{index}']=status
     return {'date':date,'generatedAt':int(now.timestamp()*1000),'alerts':alerts,'states':states}
 
