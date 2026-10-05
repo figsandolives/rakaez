@@ -55,7 +55,7 @@ def calculate(date,now,employees,schedule,attendance,legacy):
             grouped.setdefault(employee['id'],[]).append({'type':'checkOut' if punch.get('type')=='out' else 'checkIn','timestamp':dt.timestamp()*1000})
         except (ValueError,TypeError):continue
     assignments=values((schedule or {}).get('assignments'));alerts={};states={}
-    names={'hawalli':'حولي','abu_al_hasaniya':'أبو الحصانية','yarmouk':'اليرموك'}
+    names={'hawalli':'حولي','surra':'حولي','abu_al_hasaniya':'أبو الحصانية','abulhasania':'أبو الحصانية','yarmouk':'اليرموك'}
     for employee_id in {a.get('employeeId') for a in assignments}:
         employee=employees.get(employee_id)
         if not employee:continue
@@ -66,22 +66,23 @@ def calculate(date,now,employees,schedule,attendance,legacy):
             start=datetime.fromisoformat(date+'T'+shift['from']).replace(tzinfo=TZ);end=datetime.fromisoformat(date+'T'+shift['to']).replace(tzinfo=TZ)
             if end<=start:end+=timedelta(days=1)
             checkin,checkout=punch_pairs[index] if index<len(punch_pairs) else (None,None)
+            branch=names.get(shift.get('branchId'),shift.get('branchName') or shift.get('branchId') or 'غير محدد')
             status={'employeeId':employee_id,'assignmentId':shift.get('id'),'checkIn':checkin,'checkOut':checkout,'from':shift['from'],'to':shift['to']}
             def add(kind,before,after,minutes=0):
                 key=f'attendance-alert-{date}-{employee_id}-{kind}-{index}'
-                alerts[key]={'id':key,'kind':kind,'before':before,'after':after,'employeeId':employee_id,'employeeName':employee.get('fullName') or 'موظف','minutes':minutes,'date':date,'shiftDetails':details}
+                alerts[key]={'id':key,'kind':kind,'before':before,'after':after,'employeeId':employee_id,'employeeName':employee.get('fullName') or 'موظف','minutes':minutes,'date':date,'branchId':shift.get('branchId') or '', 'branchName':branch,'shiftDetails':details}
             if checkin:
                 late=max(0,int((float(checkin['timestamp'])/1000-start.timestamp())//60));status['arrival']='late' if late else 'present'
-                if late:add('late','تأخر الموظف',f'عن الدوام {late} دقيقة.',late)
+                if late:add('late','تأخر الموظف',f'عن الدوام في فرع {branch} {late} دقيقة.',late)
             else:
                 status['arrival']='missing_checkin' if now>=start else 'pending'
-                if now>=start:add('missing_checkin','لم يقم الموظف','ببصمة دخول في الوقت المحدد إلى الآن.')
+                if now>=start:add('missing_checkin','لم يقم الموظف',f'ببصمة دخول في فرع {branch} إلى الآن.')
             if checkout:
                 early=max(0,int((end.timestamp()-float(checkout['timestamp'])/1000)//60));status['departure']='early' if early else 'completed'
-                if early:add('early','خرج الموظف',f'مبكراً من دوامه {early} دقيقة.',early)
+                if early:add('early','خرج الموظف',f'مبكراً من دوامه في فرع {branch} {early} دقيقة.',early)
             else:
                 status['departure']='missing_checkout' if checkin and now>=end else 'pending'
-                if checkin and now>=end:add('missing_checkout','لم يقم الموظف','ببصمة خروج في الوقت المحدد إلى الآن.')
+                if checkin and now>=end:add('missing_checkout','لم يقم الموظف',f'ببصمة خروج في فرع {branch} إلى الآن.')
             states[f'{employee_id}-{index}']=status
     return {'date':date,'generatedAt':int(now.timestamp()*1000),'alerts':alerts,'states':states}
 
