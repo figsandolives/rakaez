@@ -230,7 +230,7 @@ function openAssignmentModal(employeeId,branchId,assignmentId=""){
       if(!modalRoot.isConnected)return;
       previousShifts=availablePreviousShifts(source,employeeId,branchId,sourceDate);previousIndex=0;
       if(!previousShifts.length)throw new Error("لا توجد فترات سابقة غير مضافة لهذا الموظف في هذا اليوم والفرع.");
-      renderPrevious();
+      renderPrevious();button.hidden=true;
     }catch(requestError){if(modalRoot.isConnected){error.textContent=requestError.message||"تعذر تحميل الدوام السابق.";error.classList.remove("hidden");}}finally{button.disabled=false;}
   });
 }
