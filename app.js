@@ -383,9 +383,13 @@ function deductionDateText(value){
   return `${day}/${month}/${year}`;
 }
 function deductionBookNumber(){
-  const year=new Date().getFullYear(),used=state.deductions.map(item=>String(item.bookNumber||"")).filter(number=>number.includes(String(year)));
-  const max=used.reduce((result,number)=>Math.max(result,Number(number.split("-").pop())||0),0);
-  return `DED-${year}-${String(max+1).padStart(4,"0")}`;
+  const year=new Date().getFullYear(),prefix=`DED-${year}-`;
+  const used=new Set(state.deductions.map(item=>String(item.bookNumber||""))
+    .filter(number=>number.startsWith(prefix))
+    .map(number=>Number(number.slice(prefix.length))));
+  let next=1;
+  while(used.has(next))next++;
+  return `${prefix}${String(next).padStart(4,"0")}`;
 }
 function deductionEmployee(record){return state.employees.find(employee=>employee.id===record.employeeId)||{fullName:record.employeeName||"موظف غير موجود"};}
 function renderDeductionBooks(){
@@ -440,7 +444,7 @@ function showDeductionLoading(title){
 function updateDeductionLoading(title){const element=$("#deduction-loading-title");if(element)element.textContent=title;}
 function deductionLetterHtml(record){
   const employee=deductionEmployee(record),companyLogo=state.settings.companyLogoUrl||state.settings.companyLogoDataUrl,stamp=record.signed?state.settings.approvalStampDataUrl:"";
-  return `<article class="deduction-letter" dir="rtl"><header class="deduction-letter-head"><div class="rakaez-letter-brand"><img src="rakaez-mark.png" crossorigin="anonymous" alt="ركائز"><div><b>ركائز</b><span>إدارة الموارد البشرية والشؤون الإدارية</span></div></div><div class="company-letter-logo">${companyLogo?`<img src="${escapeHtml(companyLogo)}" crossorigin="anonymous" alt="شعار الشركة">`:""}</div></header><div class="deduction-letter-meta"><span>رقم الكتاب: <b dir="ltr">${escapeHtml(record.bookNumber)}</b></span><span>التاريخ: <b dir="ltr">${deductionDateText(record.date)}</b></span></div><h1>كتاب خصم من الراتب</h1><section class="deduction-letter-body"><h2>إلى الموظف / ${escapeHtml(employee.fullName)}</h2><p>السلام عليكم ورحمة الله وبركاته،</p><p>بناءً على الصلاحيات الإدارية المخولة لنا، تقرر إخطاركم بخصم مبلغ وقدره <strong dir="rtl">( <b dir="ltr">${escapeHtml(record.amount)}</b> دينار كويتي )</strong> من مستحقات راتبكم الشهري القادم، وذلك للأسباب الموضحة أدناه:</p><div class="deduction-reason-box"><h3>أسباب الخصم بالتفصيل:</h3><p>${escapeHtml(record.reason).replace(/\n/g,"<br>")}</p></div><p class="deduction-closing">نهيب بكم الالتزام الكامل بقوانين العمل والتعليمات الإدارية، تفادياً لاتخاذ إجراءات إدارية أشد في المرات القادمة.<br>وتقبلوا فائق الاحترام والتقدير.</p></section><footer class="deduction-approval"><b>اعتماد مدير الموارد البشرية:</b><div>${stamp?`<img src="${escapeHtml(stamp)}" alt="توقيع واعتماد مدير الموارد البشرية">`:"<span></span>"}</div><i>التوقيع</i></footer></article>`;
+  return `<article class="deduction-letter" dir="rtl"><header class="deduction-letter-head"><div class="deduction-letter-brand">${companyLogo?`<img src="${escapeHtml(companyLogo)}" crossorigin="anonymous" alt="شعار المنشأة">`:""}<span>إدارة الموارد البشرية والشؤون الإدارية</span></div></header><div class="deduction-letter-meta"><span>رقم الكتاب: <b dir="ltr">${escapeHtml(record.bookNumber)}</b></span><span>التاريخ: <b dir="ltr">${deductionDateText(record.date)}</b></span></div><h1>كتاب خصم من الراتب</h1><section class="deduction-letter-body"><h2>إلى الموظف / ${escapeHtml(employee.fullName)}</h2><p>السلام عليكم ورحمة الله وبركاته،</p><p>بناءً على الصلاحيات الإدارية المخولة لنا، تقرر إخطاركم بخصم مبلغ وقدره <strong dir="rtl">( <b dir="ltr">${escapeHtml(record.amount)}</b> دينار كويتي )</strong> من مستحقات راتبكم الشهري القادم، وذلك للأسباب الموضحة أدناه:</p><div class="deduction-reason-box"><h3>أسباب الخصم بالتفصيل:</h3><p>${escapeHtml(record.reason).replace(/\n/g,"<br>")}</p></div><p class="deduction-closing">نهيب بكم الالتزام الكامل بقوانين العمل والتعليمات الإدارية، تفادياً لاتخاذ إجراءات إدارية أشد في المرات القادمة.<br>وتقبلوا فائق الاحترام والتقدير.</p></section><footer class="deduction-approval"><b>اعتماد مدير الموارد البشرية:</b><div>${stamp?`<img src="${escapeHtml(stamp)}" alt="توقيع واعتماد مدير الموارد البشرية">`:"<span></span>"}</div><i>التوقيع</i></footer></article>`;
 }
 async function createDeductionPdf(record){
   if(!window.html2canvas||!window.jspdf)throw new Error("تعذر تحميل أداة تجهيز PDF. حدّث الصفحة وحاول مرة أخرى.");
