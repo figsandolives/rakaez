@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resolvePayrollPeriod,payrollWindows,monthDate,nextDate,buildPayrollLedger} from '../payroll.js';
+import {resolvePayrollPeriod,payrollWindows,monthDate,nextDate,buildPayrollLedger,payrollDay,payrollClock} from '../payroll.js';
 const config={startDate:'2026-09-27',endDate:'2026-10-23'};
 test('period expires after its last day and resumes the following day',()=>{
  assert.equal(resolvePayrollPeriod(config,'2026-10-23').active,true);
@@ -27,3 +27,5 @@ test('books and attendance penalties retain distinct stable IDs and exact fils',
  const s={books:[{id:'book',employeeId:'john',date:'2026-10-05',amount:'5.250',bookNumber:'DED-2026-0001'}],penalties:{'2026-10-05':{alert:{employeeId:'john',amountFils:250,reason:'عدم القيام ببصمة دخول في فرع حولي بتاريخ 05/10/2026'}}}};
  const rows=buildPayrollLedger(s,[{id:'john'}]);assert.equal(rows.reduce((n,r)=>n+r.amountFils,0),5500);assert.equal(new Set(rows.map(r=>r.id)).size,2);assert.equal(rows.find(r=>r.id.startsWith('penalty')).type,'بصمة حضور مفقودة من فرع حولي');
 });
+
+test('Arabic weekday and twelve-hour shift display',()=>{assert.equal(payrollDay('2026-10-01'),'الخميس');assert.equal(payrollClock('00:00'),'12:00 صباحًا');assert.equal(payrollClock('12:30'),'12:30 مساءً');assert.equal(payrollClock('23:00'),'11:00 مساءً');});
