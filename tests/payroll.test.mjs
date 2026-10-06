@@ -29,3 +29,5 @@ test('books and attendance penalties retain distinct stable IDs and exact fils',
 });
 
 test('Arabic weekday and twelve-hour shift display',()=>{assert.equal(payrollDay('2026-10-01'),'الخميس');assert.equal(payrollClock('00:00'),'12:00 صباحًا');assert.equal(payrollClock('12:30'),'12:30 مساءً');assert.equal(payrollClock('23:00'),'11:00 مساءً');});
+
+test('ten-minute grace waives small delays but counts entire delay once exceeded',()=>{for(const [arrival,expected] of [['07:39',0],['07:40',0],['07:41',11],['07:45',15]]){const s=source();delete s.schedules['2026-10-05'].assignments.b;s.attendance={'2026-10-05':{john:{in:{type:'checkIn',timestamp:stamp(arrival)}}}};const rows=buildPayrollLedger(s,[{id:'john'}],stamp('21:00'));assert.equal(rows.reduce((n,r)=>n+r.minutes,0),expected,arrival);}});

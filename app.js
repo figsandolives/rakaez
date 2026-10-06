@@ -1,4 +1,4 @@
-import { renderPayroll, refreshPayroll } from "./payroll.js?v=20261006-payroll-day-time";
+import { renderPayroll, refreshPayroll } from "./payroll.js?v=20261006-payroll-grace";
 // Keep the AI connection files versioned so GitHub Pages never reuses an
 // outdated browser-cached endpoint after a deployment.
 import { CONFIG } from "./config.js?v=20260930-vps-translation";
