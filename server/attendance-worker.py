@@ -201,6 +201,7 @@ def run():
                 old=pool.submit(db,'fingerprintPunches',auth,params={'orderBy':json.dumps('date'),'startAt':json.dumps(date),'endAt':json.dumps(date+'\uf8ff')})
                 employees,schedule,attendance=[job.result() for job in jobs];legacy=old.result()
             close_due_days(auth,datetime.now(TZ),employees)
+            if date!=datetime.now(TZ).date().isoformat():continue
             result=calculate(date,datetime.now(TZ),employees,schedule,attendance,legacy)
             signature=json.dumps([date,result['alerts'],result['states']],sort_keys=True)
             if signature!=last or int(time.time())%60<15:
