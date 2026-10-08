@@ -41,3 +41,5 @@
 .system-notifications-list article{grid-template-columns:26px 42px minmax(0,1fr) 32px;align-items:start}.system-alert-number{margin-top:8px}.system-alert-menu{grid-column:4}.system-alert-deduct{border:1px solid #dc3545;border-radius:8px;background:#fff1f3;color:#bd2334;font-weight:800}.attendance-deduction-confirm{z-index:11000}.attendance-deduct-body{padding:18px;line-height:1.9}.attendance-deduct-error{color:#bd2334}.attendance-deduction-confirm footer{display:flex;gap:10px}
 
 .system-notifications-list article.system-alert-deducted{background:#edf9f1;border-color:#8bd1a3;color:#197346}.system-alert-deducted .system-employee-name{color:#197346}.system-alert-deducted .system-alert-number{background:#d6f1df;color:#197346}.system-deducted-status{display:block;color:#197346;font-size:13px;margin-top:8px}
+
+.system-notifications-date input{width:165px;direction:ltr;background:#fff;font-weight:700}.system-notifications-date{flex-wrap:wrap;gap:10px}.system-history-error{color:#b12c45;padding:20px}
